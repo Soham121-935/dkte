@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* light theme */
+  --c-canvas: 244 246 244;
+  --c-surface: 255 255 255;
+  --c-surface-2: 236 240 237;
+  --c-surface-3: 224 230 226;
+  --c-line: 220 226 222;
+  --c-line-strong: 196 205 199;
+  --c-ink: 22 30 26;
+  --c-ink-2: 76 88 81;
+  --c-ink-3: 122 134 127;
+  --c-brand: 24 124 86;
+  --c-brand-2: 16 92 64;
+  --c-teal: 20 128 134;
+  --c-amber: 184 112 20;
+  --c-danger: 190 48 48;
+  --c-info: 38 96 170;
+}
+
+.dark {
+  /* dark forest-green / charcoal theme */
+  --c-canvas: 11 20 17;
+  --c-surface: 17 28 24;
+  --c-surface-2: 24 37 32;
+  --c-surface-3: 32 48 41;
+  --c-line: 33 48 42;
+  --c-line-strong: 52 72 62;
+  --c-ink: 230 236 232;
+  --c-ink-2: 168 182 174;
+  --c-ink-3: 118 134 125;
+  --c-brand: 91 212 160;
+  --c-brand-2: 61 170 125;
+  --c-teal: 86 196 200;
+  --c-amber: 232 170 64;
+  --c-danger: 236 98 98;
+  --c-info: 110 164 236;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    font-feature-settings: 'tnum' 1, 'cv11' 1;
+  }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand/70 ring-offset-2 ring-offset-canvas;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-line-strong));
+    border-radius: 8px;
+    border: 2px solid rgb(var(--c-canvas));
+  }
+  input[type='number']::-webkit-inner-spin-button {
+    opacity: 0.6;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-line bg-surface;
+  }
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-wide text-ink-3;
+  }
+  .input {
+    @apply w-full rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .table {
+    @apply w-full border-collapse text-sm;
+  }
+  .table th {
+    @apply border-b border-line px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-ink-3;
+  }
+  .table td {
+    @apply border-b border-line/70 px-3 py-2 align-top text-ink-2;
+  }
+  .table tr:last-child td {
+    @apply border-b-0;
+  }
+  .prose-chat {
+    @apply text-sm leading-relaxed text-ink;
+  }
+  .prose-chat p {
+    @apply my-1.5;
+  }
+  .prose-chat ul {
+    @apply my-1.5 list-disc pl-5;
+  }
+  .prose-chat ol {
+    @apply my-1.5 list-decimal pl-5;
+  }
+  .prose-chat li {
+    @apply my-0.5;
+  }
+  .prose-chat strong {
+    @apply font-semibold text-ink;
+  }
+  .prose-chat em {
+    @apply text-ink-2;
+  }
+  .prose-chat code {
+    @apply rounded bg-surface-3 px-1 py-0.5 font-mono text-[12px];
+  }
+  .prose-chat table {
+    @apply my-2 w-full text-xs;
+  }
+  .prose-chat th,
+  .prose-chat td {
+    @apply border border-line px-2 py-1 text-left;
+  }
+  .prose-chat h1,
+  .prose-chat h2,
+  .prose-chat h3 {
+    @apply mt-3 mb-1 text-sm font-semibold;
+  }
+  .prose-chat hr {
+    @apply my-3 border-line;
+  }
+}
+
+.recharts-cartesian-grid line {
+  stroke: rgb(var(--c-line));
+}
+.recharts-text {
+  fill: rgb(var(--c-ink-3));
+  font-size: 11px;
+}
+.recharts-default-tooltip {
+  border-radius: 6px !important;
+}

@@ -1,0 +1,175 @@
+{
+  "$id": "https://myco-ai.local/schemas/telemetryv1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Periodic sensor sample. Also accepted on POST /api/ingest/telemetry. MQTT topic: myco/{device_id}/telemetry (device -> backend). schema_version = 1.",
+  "properties": {
+    "device_id": {
+      "maxLength": 64,
+      "minLength": 3,
+      "pattern": "^[a-zA-Z0-9_\\-]+$",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "fan_state": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fan State"
+    },
+    "firmware_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Firmware Version"
+    },
+    "heater_state": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Heater State"
+    },
+    "humidifier_state": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Humidifier State"
+    },
+    "message_id": {
+      "maxLength": 64,
+      "minLength": 4,
+      "title": "Message Id",
+      "type": "string"
+    },
+    "relative_humidity_percent": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Relative Humidity Percent"
+    },
+    "rssi_dbm": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rssi Dbm"
+    },
+    "schema_version": {
+      "default": 1,
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sensor_errors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Sensor Errors",
+      "type": "array"
+    },
+    "source": {
+      "default": "hardware",
+      "enum": [
+        "hardware",
+        "simulation"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "substrate_moisture_raw": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Substrate Moisture Raw"
+    },
+    "temperature_c": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Temperature C"
+    },
+    "timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Measurement time (ISO-8601). May be null when the device clock is not synchronised.",
+      "title": "Timestamp"
+    },
+    "uptime_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uptime Ms"
+    }
+  },
+  "required": [
+    "device_id"
+  ],
+  "title": "TelemetryV1",
+  "type": "object",
+  "x-direction": "device -> backend",
+  "x-mqtt-topic": "myco/{device_id}/telemetry"
+}

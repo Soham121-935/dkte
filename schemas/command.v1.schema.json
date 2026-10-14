@@ -1,0 +1,71 @@
+{
+  "$id": "https://myco-ai.local/schemas/commandv1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Actuator command issued by the deterministic control service (never by the LLM). MQTT topic: myco/{device_id}/commands (backend -> device). schema_version = 1.",
+  "properties": {
+    "actuator": {
+      "enum": [
+        "fan",
+        "heater",
+        "humidifier"
+      ],
+      "title": "Actuator",
+      "type": "string"
+    },
+    "command_id": {
+      "title": "Command Id",
+      "type": "string"
+    },
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "origin": {
+      "default": "auto",
+      "enum": [
+        "auto",
+        "manual",
+        "safety",
+        "simulator"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "state": {
+      "title": "State",
+      "type": "boolean"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "ttl_seconds": {
+      "default": 60,
+      "description": "Device must ignore the command after this age.",
+      "maximum": 600,
+      "minimum": 5,
+      "title": "Ttl Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "device_id",
+    "actuator",
+    "state"
+  ],
+  "title": "CommandV1",
+  "type": "object",
+  "x-direction": "backend -> device",
+  "x-mqtt-topic": "myco/{device_id}/commands"
+}

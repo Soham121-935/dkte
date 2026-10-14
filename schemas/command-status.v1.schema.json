@@ -1,0 +1,95 @@
+{
+  "$id": "https://myco-ai.local/schemas/commandstatusv1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Acknowledgement for a command: applied, rejected or failed. MQTT topic: myco/{device_id}/command-status (device -> backend). schema_version = 1.",
+  "properties": {
+    "actuator": {
+      "enum": [
+        "fan",
+        "heater",
+        "humidifier"
+      ],
+      "title": "Actuator",
+      "type": "string"
+    },
+    "command_id": {
+      "title": "Command Id",
+      "type": "string"
+    },
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "message_id": {
+      "title": "Message Id",
+      "type": "string"
+    },
+    "requested_state": {
+      "title": "Requested State",
+      "type": "boolean"
+    },
+    "result_state": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result State"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "timestamp": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timestamp"
+    }
+  },
+  "required": [
+    "device_id",
+    "command_id",
+    "actuator",
+    "requested_state",
+    "status"
+  ],
+  "title": "CommandStatusV1",
+  "type": "object",
+  "x-direction": "device -> backend",
+  "x-mqtt-topic": "myco/{device_id}/command-status"
+}
