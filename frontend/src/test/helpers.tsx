@@ -7,8 +7,6 @@ import { render } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import { ThemeProvider } from '@/providers/ThemeProvider';
-import { AuthProvider } from '@/providers/AuthProvider';
 import { LiveProvider } from '@/providers/LiveProvider';
 import { DeviceProvider } from '@/providers/DeviceProvider';
 import { ToastProvider } from '@/providers/ToastProvider';
@@ -215,17 +213,13 @@ export function makeQueryClient() {
 export function renderApp(ui: ReactElement, { route = '/', queryClient = makeQueryClient() }: { route?: string; queryClient?: QueryClient } = {}) {
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <LiveProvider>
-              <DeviceProvider>
-                <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
-              </DeviceProvider>
-            </LiveProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </ThemeProvider>
+      <ToastProvider>
+        <LiveProvider>
+          <DeviceProvider>
+            <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+          </DeviceProvider>
+        </LiveProvider>
+      </ToastProvider>
     </QueryClientProvider>,
   );
   return { ...utils, queryClient };

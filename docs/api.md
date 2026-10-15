@@ -42,7 +42,7 @@ Device-facing endpoints (`/api/ingest/*`) use the **per-device token** in the
 
 ### System
 * `GET /api/system/health` – liveness `{status, time, version}` (always public).
-* `GET /api/system/status` – mode (`live` / `demo` / `disconnected` with label + detail), devices, open-alert counts, transport/MQTT/simulator/AI/notification status, `public_read`.
+* `GET /api/system/status` – mode (`live` / `demo` / `disconnected` with label + detail), devices, open-alert counts, transport/MQTT/simulator/AI/notification status, `public_read`, `open_access` (true = no sign-in; anonymous callers act as a local operator).
 * `GET /api/system/events?category=&device_id=&limit=` – audit log (categories: `validation`, `auth`, `control`, `connection`, `alert`, `simulator`, `system`).
 
 ### Auth / users

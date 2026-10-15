@@ -45,8 +45,14 @@ def get_optional_user(request: Request, db: Session = Depends(get_db)) -> Curren
     return CurrentUser(id=user.id, username=user.username, role=user.role)
 
 
+LOCAL_OPERATOR = CurrentUser(id=0, username="local-operator", role="operator")
+
+
 def get_current_user(user: CurrentUser | None = Depends(get_optional_user)) -> CurrentUser:
     if user is None:
+        if get_settings().open_access:
+            # OPEN_ACCESS=true: the dashboard has no sign-in; anonymous callers are a local operator
+            return LOCAL_OPERATOR
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     return user
 

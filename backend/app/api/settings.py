@@ -20,7 +20,7 @@ def get_all(_=Depends(read_access), db: Session = Depends(get_db)):
         "sections": settings_store.get_all(db),
         "defaults": settings_store.DEFAULTS,
         "runtime": {  # non-secret runtime configuration for display
-            "app_env": s.app_env, "database": "sqlite" if s.is_sqlite else "postgresql", "public_read": s.public_read,
+            "app_env": s.app_env, "database": "sqlite" if s.is_sqlite else "postgresql", "public_read": s.public_read, "open_access": s.open_access,
             "simulator_enabled": s.simulator_enabled, "mqtt_enabled": s.mqtt_enabled, "ai_configured": s.ai_configured,
             "ai_model": s.ai_model or None, "device_offline_after_seconds": s.device_offline_after_seconds,
             "prediction_interval_seconds": s.prediction_interval_seconds,

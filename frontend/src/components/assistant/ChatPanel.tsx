@@ -3,7 +3,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Send, Sparkles, Square, User as UserIcon } from 'lucide-react';
 import { Badge, Button, ErrorState, Loading, Textarea } from '@/components/ui';
-import { useViewMode } from '@/providers/ViewModeProvider';
 import { fmtAgo, fmtDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AIMessage, AIStatus } from '@/api/types';
@@ -41,7 +40,6 @@ function cleanContent(content: string): string {
 }
 
 export function MessageBubble({ m, compact }: { m: AIMessage; compact?: boolean }) {
-  const { detailed } = useViewMode();
   const isUser = m.role === 'user';
   return (
     <div className={cn('flex gap-2.5', isUser ? 'flex-row-reverse' : '')}>
@@ -56,25 +54,20 @@ export function MessageBubble({ m, compact }: { m: AIMessage; compact?: boolean 
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{m.content}</p>
         ) : (
           <div className="prose-chat">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{detailed ? m.content : cleanContent(m.content)}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanContent(m.content)}</ReactMarkdown>
           </div>
         )}
         <div className={cn('mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]', isUser ? 'text-spore-ink/70' : 'text-ink-3')}>
           <span title={fmtDateTime(m.created_at)}>{fmtAgo(m.created_at)}</span>
           {!isUser && m.mode === 'llm' && (
-            <Badge tone="brand" title={detailed ? `${m.model} · ${m.latency_ms ?? '?'} ms · ${m.prompt_tokens ?? '?'}+${m.completion_tokens ?? '?'} tokens` : 'Written by the language model from your stored data'}>
-              <Sparkles className="h-2.5 w-2.5" /> {detailed ? `AI · ${m.model}` : 'Answered by MYCO AI'}
+            <Badge tone="brand" title={`${m.model ?? 'language model'} · ${m.latency_ms ?? '?'} ms`}>
+              <Sparkles className="h-2.5 w-2.5" /> Answered by MYCO AI
             </Badge>
           )}
           {!isUser && m.mode === 'fallback' && (
             <Badge tone="amber" title={m.error ?? 'AI provider unavailable'}>
-              {detailed ? 'AI unavailable · deterministic answer' : 'From your stored data (AI offline)'}
+              From your stored data (AI offline)
             </Badge>
-          )}
-          {detailed && !isUser && m.context_snapshot && 'current_reading' in m.context_snapshot && (
-            <span title="The assistant received the latest stored reading, targets, batch and alert context from the database">
-              context: {String(((m.context_snapshot as Record<string, Record<string, unknown>>).current_reading ?? {}).kind ?? 'reading').replace(/_/g, ' ')}
-            </span>
           )}
         </div>
       </div>

@@ -1,16 +1,14 @@
 /**
- * The AI must be reachable from everywhere and the home page must explain the
+ * The AI must be reachable from everywhere and the Overview must explain the
  * chamber in plain words. These tests drive the real App through the recorded
- * fixtures: briefing card, ask box → drawer → POST message, status labels,
- * "Ask AI" shortcuts and the simple/detailed view switch.
+ * fixtures: briefing card, the chat embedded in the Overview, the floating
+ * window on the other pages, status labels and the "Ask AI" shortcuts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '@/App';
-import { tokenStore } from '@/api/client';
 import { FIXTURES, WebSocketStub, installFetchMock, json, renderApp, type FetchMock } from '@/test/helpers';
-import { VIEW_MODE_KEY } from '@/providers/ViewModeProvider';
 
 /** Stateful stand-in for the conversation endpoints (create, fetch, send). */
 function installChatRoutes(fetchMock: FetchMock) {
@@ -47,13 +45,10 @@ describe('MYCO AI front and centre', () => {
     WebSocketStub.instances.length = 0;
     vi.stubGlobal('WebSocket', WebSocketStub);
     fetchMock = installFetchMock();
-    localStorage.removeItem(VIEW_MODE_KEY);
   });
   afterEach(() => {
     fetchMock.restore();
     vi.unstubAllGlobals();
-    tokenStore.set(null);
-    localStorage.removeItem(VIEW_MODE_KEY);
   });
 
   it('shows the plain-language briefing on the home page, labelled as computed when the AI is offline', async () => {
@@ -71,33 +66,39 @@ describe('MYCO AI front and centre', () => {
     expect(main.textContent).not.toMatch(/bucket \d+s|transport|hysteresis|rule_key|MQTT/);
   });
 
-  it('asks MYCO AI from the home page: the drawer opens and the question is sent in the device context', async () => {
+  it('the chat lives on the Overview: typing a question creates a conversation for the chamber and renders the labelled reply', async () => {
     const user = userEvent.setup();
     const sent = installChatRoutes(fetchMock);
     renderApp(<App />);
     await screen.findByText(FIXTURES.aiInsight.headline);
-    await user.type(screen.getByLabelText('Ask MYCO AI', { selector: 'input' }), 'Why is humidity dropping?');
-    await user.click(screen.getByRole('button', { name: 'Ask' }));
-    const drawer = await screen.findByRole('dialog', { name: /MYCO AI assistant/i });
+    const chat = screen.getByRole('region', { name: 'MYCO AI assistant' });
+    // no floating bubble / window here – the chat is part of the page
+    expect(screen.queryByRole('button', { name: 'Ask MYCO AI' })).not.toBeInTheDocument();
+    expect(within(chat).getByText(/Hi, I’m MYCO AI/)).toBeInTheDocument();
+    expect(within(chat).getByText(/Talking about/)).toHaveTextContent('simulated');
+    await user.type(within(chat).getByLabelText('Ask MYCO AI', { selector: 'textarea' }), 'Why is humidity dropping?{Enter}');
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toEqual({ conversationId: 42, content: 'Why is humidity dropping?' });
     const create = fetchMock.calls.find((c) => c.method === 'POST' && c.url === '/api/ai/conversations');
     expect(create?.body).toMatchObject({ device_id: 'myco-sim-01' });
     // the reply is rendered with a friendly "offline" label and without the machine footer
-    expect(await within(drawer).findByText('From your stored data (AI offline)')).toBeInTheDocument();
-    expect(within(drawer).getByText(/Mostly fine/)).toBeInTheDocument();
-    expect(within(drawer).queryByText(/deterministic assistant/i)).not.toBeInTheDocument();
-    expect(within(drawer).getByText(/Talking about/)).toHaveTextContent('simulated chamber');
-    // escape closes it
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /MYCO AI assistant/i })).not.toBeInTheDocument());
+    expect(await within(chat).findByText('From your stored data (AI offline)')).toBeInTheDocument();
+    expect(within(chat).getByText(/Mostly fine/)).toBeInTheDocument();
+    expect(within(chat).queryByText(/deterministic assistant/i)).not.toBeInTheDocument();
+    // the cap's "Ask MYCO AI" button sends its question into the same embedded chat
+    const cap = screen.getByRole('region', { name: 'Chamber climate' });
+    await user.click(within(cap).getByRole('button', { name: /^Ask MYCO AI/ }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1].conversationId).toBe(42);
+    expect(sent[1].content).toMatch(/chamber/i);
+    expect(screen.queryByRole('dialog', { name: /MYCO AI assistant/i })).not.toBeInTheDocument();
   });
 
-  it('the floating bubble opens the assistant on any page and suggestion chips send a question', async () => {
+  it('on the other pages the floating bubble opens the chat window and suggestion chips send a question', async () => {
     const user = userEvent.setup();
     const sent = installChatRoutes(fetchMock);
-    renderApp(<App />, { route: '/monitoring' });
-    await screen.findByRole('heading', { level: 1, name: 'Live Monitoring' });
+    renderApp(<App />, { route: '/stats' });
+    await screen.findByRole('heading', { level: 1, name: 'Stats' });
     await user.click(screen.getByRole('button', { name: 'Ask MYCO AI' }));
     const drawer = await screen.findByRole('dialog', { name: /MYCO AI assistant/i });
     expect(within(drawer).getByText(/Hi, I’m MYCO AI/)).toBeInTheDocument();
@@ -108,50 +109,27 @@ describe('MYCO AI front and centre', () => {
     expect(sent[0].content).toBe(FIXTURES.aiSuggestions.questions[0]);
     // the reply carried a fresh provider status (recorded without a key) and the label follows it
     expect(await within(drawer).findByText(/MYCO AI is offline/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/Talking about/)).toHaveTextContent('simulated chamber');
+    // escape closes it
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /MYCO AI assistant/i })).not.toBeInTheDocument());
   });
 
-  it('"Ask AI" shortcuts on alerts pre-fill a question about that alert', async () => {
+  it('"Ask MYCO AI" shortcuts on alerts and predictions pre-fill a question about that item', async () => {
     const user = userEvent.setup();
     const sent = installChatRoutes(fetchMock);
-    renderApp(<App />);
-    const alert = FIXTURES.alerts[0];
+    const { unmount } = renderApp(<App />);
+    const alert = FIXTURES.alerts.find((a) => a.status === 'active')!;
     await user.click((await screen.findAllByRole('button', { name: `Ask MYCO AI about ${alert.title}` }))[0]);
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0].content).toContain(alert.title);
-  });
-
-  it('the simple/detailed switch hides and reveals engineering details and is remembered', async () => {
-    const user = userEvent.setup();
-    renderApp(<App />);
-    await screen.findByText(FIXTURES.aiInsight.headline);
-    const select = screen.getAllByLabelText('Select device')[0] as HTMLSelectElement;
-    expect(select.options[0].text).not.toContain('(myco-sim-01)');
-    expect(screen.queryByText(/Server time/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: 'detailed' }));
-    await waitFor(() => expect(select.options[0].text).toContain('(myco-sim-01)'));
-    expect(screen.getByText('Server time')).toBeInTheDocument();
-    expect(screen.getByText('Device id')).toBeInTheDocument();
-    expect(localStorage.getItem(VIEW_MODE_KEY)).toBe('detailed');
-    await user.click(screen.getByRole('radio', { name: 'simple' }));
-    await waitFor(() => expect(screen.queryByText('Server time')).not.toBeInTheDocument());
-    expect(localStorage.getItem(VIEW_MODE_KEY)).toBe('simple');
-  });
-
-  it('the full assistant page uses the shared chat, explains the AI status and keeps technical stats behind a toggle', async () => {
-    const user = userEvent.setup();
-    const sent = installChatRoutes(fetchMock);
-    renderApp(<App />, { route: '/assistant' });
-    await screen.findByRole('heading', { level: 1, name: 'AI Cultivation Assistant' });
-    // the floating bubble is not shown here – the page itself is the assistant
-    expect(screen.queryByRole('button', { name: 'Ask MYCO AI' })).not.toBeInTheDocument();
-    // existing conversations are listed with the chamber name instead of the device id
-    expect(await screen.findByText(FIXTURES.conversations[0].title)).toBeInTheDocument();
-    const tech = screen.getByRole('button', { name: /AI connection/ });
-    expect(screen.queryByText('Rate limit')).not.toBeInTheDocument();
-    await user.click(tech);
-    expect(screen.getByText('Rate limit')).toBeInTheDocument();
-    await user.type(screen.getByLabelText('Ask MYCO AI', { selector: 'textarea' }), 'What changed today?{Enter}');
-    await waitFor(() => expect(sent).toHaveLength(1));
-    expect(sent[0]).toEqual({ conversationId: FIXTURES.conversations[0].id, content: 'What changed today?' });
+    unmount();
+    renderApp(<App />, { route: '/predictions' });
+    const anomaly = FIXTURES.anomalies.anomalies[0];
+    await user.click(await screen.findByRole('button', { name: `Ask MYCO AI about ${anomaly.label}` }));
+    const drawer = await screen.findByRole('dialog', { name: /MYCO AI assistant/i });
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1].content).toContain(anomaly.label);
+    expect(await within(drawer).findByText(/Mostly fine/)).toBeInTheDocument();
   });
 });

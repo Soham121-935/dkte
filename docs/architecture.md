@@ -69,8 +69,8 @@ against actual readings (`predictions.evaluated_at / error`).
 | `backend/app/ai/` | `provider.py` (OpenAI-compatible chat completions with timeouts/retries/circuit breaker), `context.py` (DB-derived context with timestamps and source labels), `fallback.py` (deterministic answers), `service.py` (rate limiting, usage accounting, conversation persistence) |
 | `backend/app/iot/simulator.py` | physics-ish chamber model (ambient diurnal cycle, heater/fan/humidifier effects, substrate drying), scenario injection, history back-fill for demo mode |
 | `frontend/src/api` | typed client (`client.ts`), endpoint map, response types derived from live payloads |
-| `frontend/src/providers` | theme, auth (JWT in sessionStorage), live WebSocket feed, device selection, toasts |
-| `frontend/src/pages` | the ten sections + batch detail |
+| `frontend/src/providers` | live WebSocket feed, device selection, toasts, assistant (chat window / inline chat) |
+| `frontend/src/pages` | the three pages: `Home.tsx` (Overview), `Stats.tsx`, `Predictions.tsx` |
 
 ## Modes
 
@@ -88,8 +88,12 @@ selector and on every page that displays readings.
 ## Security model
 
 * Roles `viewer < operator < admin` (JWT, PBKDF2 password hashes). Reads are
-  public only when `PUBLIC_READ=true` (prototype convenience); all mutations
-  need a token. The WebSocket follows the same rule.
+  public only when `PUBLIC_READ=true` (prototype convenience); mutations need
+  a token **unless `OPEN_ACCESS=true`**, in which case token-less requests act
+  as the synthetic `local-operator` (operator role, never admin). The
+  WebSocket follows the `PUBLIC_READ` rule. `OPEN_ACCESS` exists because the
+  current UI has no sign-in; it must be `false` before the app is exposed
+  beyond a trusted network.
 * Actuators can only be switched through `services/control.issue_command`,
   which validates against device state, sensor freshness and limits. The REST
   surface exposes it solely via `POST /api/control/{id}/command` (operator,
@@ -114,27 +118,46 @@ selector and on every page that displays readings.
   prototype, so not built.
 
 
+## Frontend shape (three pages, light theme only)
+
+* `App.tsx` registers `/`, `/stats` and `/predictions`; every other path
+  redirects to `/`. `components/layout/AppShell.tsx` renders the brand, the
+  three nav links, the mode pill (LIVE / DEMO MODE / BACKEND UNREACHABLE),
+  the live-feed indicator, a gear button that opens the **Connections**
+  dialog (chamber picker, AI model status, hardware note) and the live alert
+  toasts. There is no sidebar, no sign-in UI, no theme toggle and no
+  simple/detailed switch.
+* One light palette in `index.css` (`:root` CSS variables consumed by
+  Tailwind via `rgb(var(--c-…) / <alpha>)`). The pale sage canvas, white
+  cards, blue-grey cap gradient and pink *spore* accent follow
+  `sporehouse-dashboard.html`.
+* Access: the frontend never holds credentials. With `OPEN_ACCESS=true` the
+  backend's `get_current_user` returns the synthetic `local-operator`
+  (operator role) for token-less requests, so control / stage / alert
+  mutations work without sign-in while admin routes still require a token.
+  `GET /api/system/status` reports `open_access` so the UI can say so in the
+  Connections dialog.
+
 ## Plain-language layer (frontend)
 
-* `ViewModeProvider` (`simple` | `detailed`, persisted in `localStorage` under
-  `myco-view-mode`, default `simple`). `Advanced` renders children only in the
-  detailed view; `TechDetails` is a collapsible block that is closed by default
-  in the simple view and always open in the detailed view. Pages use
-  `useViewMode().detailed` to swap copy (e.g. "hysteresis" ↔ "temperature
-  buffer", rule keys, device ids, model names).
+* Copy is grower language everywhere (no rule keys, device ids or model
+  names in the UI); engineering detail is available from the API.
 * `AssistantProvider` + `AssistantDrawer`: `ask(question)` opens the floating
   chat window (bottom sheet on phones; triggered by the `AskBubble` in the app
-  shell) or hands the question to the assistant page when it is open, and
-  sends it in the selected device's context. The chat logic lives in
-  `useAssistantChat` and is shared by the window and the full page.
+  shell) on Stats / Predictions, or scrolls to the chat embedded in the
+  Overview (`InlineChat`, element id `myco-ai`) and sends the question there.
+  The conversation id lives in the provider so both surfaces continue the same
+  chat; the logic lives in `useAssistantChat`.
 * Home page (`pages/Home.tsx`): cap / gills / stem layout (`.cap`, `.gills`,
   `.stem` in `index.css`). `verdict()` turns a displayed value + target band
   into fixed grower words (arithmetic only); `StageStepper` offers the
   previous / next profile stage and writes a stage event only after the
-  operator confirms the dialog (`POST /api/batches/{id}/stage`); the switches
-  call `POST /api/control/{id}/command` only in manual mode for operators and
-  render the chamber-confirmed state, so a sent command never looks "done"
-  before the device reports it.
+  grower confirms the dialog (`POST /api/batches/{id}/stage`); the switches
+  call `POST /api/control/{id}/command` only in manual mode and render the
+  chamber-confirmed state, so a sent command never looks "done" before the
+  device reports it. Below the stem: `LiveChart` (`/api/telemetry/series`,
+  1 h / 6 h / 24 h), `AlertsCard` (open alerts, acknowledge, ask MYCO AI),
+  the briefing card and `InlineChat`.
 * Home briefing: `GET /api/ai/insight` (`app/ai/insight.py` builds the
   deterministic structure from the assistant context; `AIService.insight`
   optionally adds an LLM narrative and caches per device/batch for 10 min).

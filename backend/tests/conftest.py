@@ -30,6 +30,7 @@ os.environ.update(
         "ADMIN_USERNAME": "admin",
         "ADMIN_PASSWORD": "admin12345",
         "PUBLIC_READ": "true",
+        "OPEN_ACCESS": "false",
         "LOG_LEVEL": "WARNING",
         "NOTIFY_WEBHOOK_URL": "",
         "SMTP_HOST": "",

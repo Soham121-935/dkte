@@ -2,7 +2,6 @@
 const withAlpha = (v) => `rgb(var(${v}) / <alpha-value>)`;
 
 export default {
-  darkMode: 'class',
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
@@ -32,15 +31,15 @@ export default {
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       boxShadow: {
-        card: '0 1px 2px rgb(0 0 0 / 0.25), 0 0 0 1px rgb(var(--c-line) / 1)',
-        pop: '0 12px 32px -8px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(var(--c-line-strong) / 1)',
+        card: '0 1px 2px rgb(18 32 28 / 0.06), 0 0 0 1px rgb(var(--c-line) / 1)',
+        pop: '0 12px 32px -8px rgb(18 32 28 / 0.22), 0 0 0 1px rgb(var(--c-line-strong) / 1)',
       },
       keyframes: {
         'fade-in': { from: { opacity: 0, transform: 'translateY(2px)' }, to: { opacity: 1, transform: 'none' } },
         pulse2: { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.45 } },
         glow: {
-          '0%': { boxShadow: '0 0 0 0 rgb(var(--c-spore) / 0.55), 0 10px 30px rgb(0 0 0 / 0.45)' },
-          '70%, 100%': { boxShadow: '0 0 0 20px rgb(var(--c-spore) / 0), 0 10px 30px rgb(0 0 0 / 0.45)' },
+          '0%': { boxShadow: '0 0 0 0 rgb(var(--c-spore) / 0.55), 0 10px 30px rgb(18 32 28 / 0.18)' },
+          '70%, 100%': { boxShadow: '0 0 0 20px rgb(var(--c-spore) / 0), 0 10px 30px rgb(18 32 28 / 0.18)' },
         },
         'pop-in': { from: { opacity: 0, transform: 'translateY(24px) scale(0.96)' }, to: { opacity: 1, transform: 'none' } },
         blink: { '50%': { opacity: 0.25 } },

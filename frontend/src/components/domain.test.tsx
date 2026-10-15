@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ActuatorChip, ConfidenceTag, ConnectionBadge, ModeBadge, SourceTag, kindFromSource } from './domain';
-import { ReadingCards, readingIsStale } from './ReadingCards';
-import type { Reading } from '@/api/types';
 
 describe('data-source labelling', () => {
   it('maps backend sources to display kinds', () => {
@@ -62,50 +60,5 @@ describe('actuator chips distinguish requested vs confirmed state', () => {
     expect(text).toMatch(/pending|requested/i);
     expect(text).toMatch(/mismatch/i);
     expect(text).toMatch(/unknown/i);
-  });
-});
-
-describe('ReadingCards', () => {
-  const reading: Reading = {
-    id: 1,
-    device_id: 'myco-esp32-01',
-    measured_at: new Date(Date.now() - 10_000).toISOString(),
-    received_at: new Date().toISOString(),
-    message_id: 'm',
-    schema_version: 1,
-    source: 'hardware',
-    temperature_c: 26.4,
-    relative_humidity_percent: 88,
-    substrate_moisture_raw: 1850,
-    fan_state: true,
-    heater_state: false,
-    humidifier_state: true,
-    quality: { temperature_c: 'ok', relative_humidity_percent: 'ok', substrate_moisture_raw: 'ok' },
-  };
-  const targets = { temperature_min_c: 20, temperature_max_c: 24, humidity_min_percent: 85, humidity_max_percent: 95, moisture_min_raw: null, fae_cycle_minutes: 0, fae_duration_minutes: 0 };
-
-  it('flags out-of-range values against targets', () => {
-    render(<ReadingCards reading={reading} targets={targets} />);
-    expect(screen.getByText('26.4')).toBeInTheDocument();
-    expect(screen.getByText('Too high')).toBeInTheDocument();
-    expect(screen.getAllByText('Good')).toHaveLength(2); // humidity (85–95) and moisture (no bounds)
-    expect(screen.getByText('no target configured')).toBeInTheDocument();
-    expect(screen.queryByText('Out of date')).not.toBeInTheDocument();
-  });
-
-  it('marks stale readings and invalid sensor values', () => {
-    const old: Reading = { ...reading, measured_at: new Date(Date.now() - 10 * 60_000).toISOString(), temperature_c: null, quality: { ...reading.quality, temperature_c: 'sensor_error' } };
-    expect(readingIsStale(old)).toBe(true);
-    expect(readingIsStale(reading)).toBe(false);
-    render(<ReadingCards reading={old} targets={targets} />);
-    expect(screen.getAllByText('Out of date').length).toBeGreaterThan(0);
-    expect(screen.getByText('no value')).toBeInTheDocument();
-    expect(screen.getByText('sensor error')).toBeInTheDocument();
-    expect(screen.queryByText('Too high')).not.toBeInTheDocument(); // no range verdict for stale data
-  });
-
-  it('shows an empty state with no reading', () => {
-    render(<ReadingCards reading={null} />);
-    expect(screen.getAllByText('no reading received yet')).toHaveLength(3);
   });
 });

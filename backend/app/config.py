@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     public_read: bool = True  # allow unauthenticated read-only dashboard access
+    # No sign-in: requests without a token act as a local *operator* (control, stages, alerts).
+    # Only for a single-user prototype on a trusted network – set false before exposing the app.
+    open_access: bool = False
 
     # ------------------------------------------------------------- database
     database_url: str = f"sqlite:///{(DATA_DIR / 'myco.sqlite3').as_posix()}"

@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-  /* light theme */
-  --c-canvas: 244 246 244;
+  /* light palette – a pale sage "mist" page with white cards */
+  --c-canvas: 238 241 234;
   --c-surface: 255 255 255;
-  --c-surface-2: 236 240 237;
-  --c-surface-3: 224 230 226;
-  --c-line: 220 226 222;
-  --c-line-strong: 196 205 199;
-  --c-ink: 22 30 26;
-  --c-ink-2: 76 88 81;
-  --c-ink-3: 122 134 127;
+  --c-surface-2: 243 245 240;
+  --c-surface-3: 229 234 226;
+  --c-line: 220 226 218;
+  --c-line-strong: 196 205 197;
+  --c-ink: 18 32 28;
+  --c-ink-2: 70 86 78;
+  --c-ink-3: 112 128 120;
   --c-brand: 24 124 86;
   --c-brand-2: 16 92 64;
   --c-teal: 20 128 134;
@@ -20,31 +20,9 @@
   --c-danger: 190 48 48;
   --c-info: 38 96 170;
   /* 'spore' accent used for the Ask MYCO AI button and the chat */
-  --c-spore: 236 168 188;
-  --c-spore-ink: 42 18 25;
-  /* ink used on the light cap / stem cards of the home page */
-  --c-cap-ink: 18 32 28;
-}
-
-.dark {
-  /* dark forest-green / charcoal theme */
-  --c-canvas: 11 20 17;
-  --c-surface: 17 28 24;
-  --c-surface-2: 24 37 32;
-  --c-surface-3: 32 48 41;
-  --c-line: 33 48 42;
-  --c-line-strong: 52 72 62;
-  --c-ink: 230 236 232;
-  --c-ink-2: 168 182 174;
-  --c-ink-3: 118 134 125;
-  --c-brand: 91 212 160;
-  --c-brand-2: 61 170 125;
-  --c-teal: 86 196 200;
-  --c-amber: 232 170 64;
-  --c-danger: 236 98 98;
-  --c-info: 110 164 236;
   --c-spore: 242 184 200;
   --c-spore-ink: 42 18 25;
+  /* ink used on the cap / stem cards of the home page */
   --c-cap-ink: 18 32 28;
 }
 
@@ -53,6 +31,9 @@
   body,
   #root {
     height: 100%;
+  }
+  html {
+    color-scheme: light;
   }
   body {
     @apply bg-canvas text-ink font-sans antialiased;
@@ -189,7 +170,9 @@
   }
   .stem {
     color: rgb(var(--c-cap-ink));
-    background: #e6ebe2;
+    background: #fbfcf8;
+    border: 1px solid rgb(var(--c-cap-ink) / 0.1);
+    border-top: 0;
     border-radius: 0 0 56px 56px / 0 0 40px 40px;
   }
   .stem-row + .stem-row {
@@ -221,7 +204,7 @@
   }
   .stem-seg button[aria-pressed='true'] {
     background: rgb(var(--c-cap-ink));
-    color: #e6ebe2;
+    color: #fbfcf8;
   }
   @media (prefers-reduced-motion: reduce) {
     .cap-pin,

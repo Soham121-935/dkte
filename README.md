@@ -6,8 +6,9 @@ chamber built from an **ESP32, a DHT11, an analog substrate-moisture probe, a
 humidifier** (see `MYCO_AI_Project_Concept_and_Hardware_Reference.pdf`).
 
 * **Frontend** – React 18 + TypeScript + Vite + Tailwind + Recharts + Lucide,
-  dark forest-green/charcoal theme with light mode, responsive, keyboard
-  accessible, explicit loading / empty / error / disconnected states.
+  a single light theme in the style of the Sporehouse concept
+  (`sporehouse-dashboard.html`), responsive, keyboard accessible, explicit
+  loading / empty / error / disconnected states.
 * **Backend** – FastAPI + SQLAlchemy 2 + Alembic, SQLite by default,
   PostgreSQL by configuration; REST + WebSocket live feed; MQTT adapter and an
   HTTP device transport; deterministic control service; rule-based prediction
@@ -15,22 +16,20 @@ humidifier** (see `MYCO_AI_Project_Concept_and_Hardware_Reference.pdf`).
 * **Demo mode** – a built-in hardware simulator produces clearly labelled
   *Simulated* data so every screen works without hardware or an AI key.
 
-Ten sections: Overview · Live Monitoring · Cultivation Batches · Growth
-Timeline · AI Predictions · Environmental Control · AI Cultivation Assistant ·
-Analytics and Reports · Device Management · System Settings.
+**Three pages, nothing else.**
 
-**Plain-language first.** The home page draws the chamber as a mushroom:
-the *cap* shows the two readings that matter in big type with grower words
-(*Just right*, *Air is a bit dry*, …) against the real target band, the
-batch's stage stepper (stages change only when you confirm them) and MYCO AI's
-one-line briefing with an **Ask MYCO AI what to do** button; the *stem* holds
-the humidifier / fan / heater switches, which follow the chamber's confirmed
-state and the control mode (Automatic · Manual · Watch only). A floating
-**Ask MYCO AI** bubble opens the chat window on every page. Device ids,
-message ids, rule keys, model names and controller decision traces stay behind
-"technical details" blocks until you switch to the *Detailed* view (header
-toggle or System Settings; remembered per browser). Fonts (Figtree, Young
-Serif) are bundled – no third-party requests from the browser.
+| Page | What is on it |
+|---|---|
+| **Overview** (`/`) | Live monitoring, manual control and the AI assistant. The chamber is drawn as a mushroom: the *cap* shows temperature and humidity in big type with grower words (*Just right*, *Air is a bit dry*, …) against the real target band, the batch's stage stepper (stages change only when you confirm them) and MYCO AI's one-line briefing; the *stem* holds the humidifier / fan / heater switches (Automatic · Manual · Watch only), which follow the chamber's *confirmed* state. Below: readings over the last 1 h / 6 h / 24 h, open alerts (ask MYCO AI about one, mark as seen), "What MYCO AI noticed" and the MYCO AI chat itself. |
+| **Stats** (`/stats`) | What happened over the last 7 or 30 days: time on target, averages, equipment run time, data gaps, alerts grouped by type, a day-by-day table and CSV exports. |
+| **Predictions** (`/predictions`) | Next-hour temperature/humidity trend forecasts with uncertainty bands, stage timing estimate with its confidence basis, rule-based "anything unusual?" findings, recommendations (what we noticed / why / suggested action) and how good past forecasts were. |
+
+A gear icon in the header opens **Connections** (which chamber is shown, how
+it is connected, whether the AI model is reachable, how to add your ESP32).
+On Stats and Predictions a floating pink **Ask MYCO AI** bubble opens the chat
+window; on the Overview the chat is part of the page. There is **no sign-in
+for now** (see `OPEN_ACCESS` below). Fonts (Figtree, Young Serif) are bundled –
+no third-party requests from the browser.
 
 ---
 
@@ -62,9 +61,15 @@ npm run dev                      # http://localhost:5173 (proxies /api and /ws t
 ```
 
 Open http://localhost:5173. The header shows **DEMO MODE** while only the
-simulator is running. Sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` from
-`backend/.env` to change control modes, create batches, trigger simulator
-scenarios or edit settings (reading is public by default – `PUBLIC_READ`).
+simulator is running. With `OPEN_ACCESS=true` (the default in `.env.example`,
+prototype only) there is no sign-in: anyone who can reach the app acts as the
+local operator (control modes, switches, stage confirmation, alerts).
+Administrative API routes (users, settings, device tokens, simulator
+scenarios) still need an admin token – obtain one with
+`POST /api/auth/login` using `ADMIN_USERNAME` / `ADMIN_PASSWORD` and use it
+with the API docs; batches and species profiles are managed through the API
+as well (`POST /api/batches`, `/api/profiles`) since the UI has no batch page
+any more.
 
 API docs: http://localhost:8000/api/docs
 
@@ -101,8 +106,8 @@ server {
 ```
 
 Production checklist: `APP_ENV=production`, long random `JWT_SECRET`, strong
-`ADMIN_PASSWORD`, `PUBLIC_READ=false` unless the dashboard is intentionally
-public, HTTPS at the proxy, `DATABASE_URL` pointing at PostgreSQL for more than
+`ADMIN_PASSWORD`, **`OPEN_ACCESS=false`** (so control needs a token again) and
+`PUBLIC_READ=false` unless the dashboard is intentionally public, HTTPS at the proxy, `DATABASE_URL` pointing at PostgreSQL for more than
 one device or long retention (`pip install psycopg[binary]`), run with one
 worker (the live event bus is in-process – see `docs/architecture.md`), back up
 `backend/data/` (SQLite file + uploaded images). Migrations run automatically at
@@ -119,7 +124,8 @@ important ones:
 | Variable | Purpose |
 |---|---|
 | `APP_ENV` | `development` / `test` / `production` |
-| `PUBLIC_READ` | `true` = dashboards readable without login (mutations always need a token) |
+| `PUBLIC_READ` | `true` = dashboards readable without login (mutations need a token unless `OPEN_ACCESS`) |
+| `OPEN_ACCESS` | `true` = **no sign-in**: anonymous callers act as the local operator (`local-operator`) – control, stage confirmation, alerts. Admin routes still need a token. Prototype/LAN use only; set `false` before exposing the app. |
 | `DATABASE_URL` | `sqlite:///./data/myco.sqlite3` or `postgresql+psycopg://user:pass@host/db` |
 | `JWT_SECRET`, `ACCESS_TOKEN_MINUTES` | session tokens |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | bootstrap admin (created on first start) |
@@ -134,8 +140,8 @@ important ones:
 
 The frontend has **no** environment variables and no secrets
 (`frontend/.env.example`). Operational thresholds (validation rules, alert
-thresholds, control defaults, display) live in the database and are edited
-under *System Settings*.
+thresholds, control defaults) live in the database and are edited through
+`GET/PATCH /api/settings/{section}` (admin token).
 
 ---
 
@@ -158,32 +164,34 @@ under *System Settings*.
 * Global mode (LIVE / DEMO MODE / DISCONNECTED) and per-device
   ONLINE / STALE / DISCONNECTED indicators everywhere readings are shown.
 
-### Cultivation
+### Cultivation (API + Overview stage stepper)
 * Batches (species, strain, substrate, inoculation date, spawn, device, status,
   notes, per-stage target overrides), observations with image upload, history
-  of stage events.
+  of stage events – all via `/api/batches/*`; the demo batch is seeded.
 * Species profiles (reference profiles for *Pleurotus ostreatus*, *Lentinula
   edodes*, *Hericium erinaceus*, a generic user template, plus user profiles
-  via clone/edit) with per-stage targets and typical day ranges; the UI tags every
-  target with its origin (batch override / user profile / reference profile /
+  via clone/edit) with per-stage targets and typical day ranges; every target
+  is tagged with its origin (batch override / user profile / reference profile /
   system default).
-* Growth timeline: stage sequence from the profile, **manual stage
-  confirmation**, expected windows and an estimate labelled with uncertainty
-  and basis. Stages never advance from the calendar alone and no biological
-  percentage is derived from temperature/humidity.
+* **Manual stage confirmation** from the stage stepper in the Overview cap;
+  expected windows and an estimate labelled with uncertainty and basis on the
+  Predictions page. Stages never advance from the calendar alone and no
+  biological percentage is derived from temperature/humidity.
 
-### Monitoring, analytics, alerts
-* Live Monitoring with bucketed charts, gap shading, target bands, actuator
-  timeline, raw readings, rejected messages, CSV export, time-range presets
-  and custom ranges.
-* Analytics: distributions, percentiles, time outside range, actuator duty
-  cycles, missing-data intervals, data completeness, daily/weekly summaries
-  (table + CSV), stage-environment table (descriptive, explicitly non-causal).
+### Monitoring, stats, alerts
+* Overview chart with bucketed series, gap shading and target bands over
+  1 h / 6 h / 24 h; raw readings, rejected messages and longer ranges remain
+  available through the API (`/api/telemetry/*`).
+* Stats page: time on target, averages, actuator run times and switch counts,
+  missing-data intervals, data completeness, alerts grouped by type, daily
+  table (7 / 30 days) and CSV exports (readings, daily, summary). Weekly
+  summaries, distributions and the stage-environment table are still served
+  by `/api/analytics/*`.
 * Alerts: configurable thresholds with grace period, sensor faults, rapid
   temperature rise, fluctuation, actuator mismatch, rapid switching, telemetry
   missing, device offline, heater runtime, failed commands; dedup with
-  occurrence counts, cooldown, auto-resolve, acknowledge/resolve with roles,
-  notification centre + live toasts, webhook / e-mail channels via backend
+  occurrence counts, cooldown, auto-resolve, acknowledge ("mark as seen") from
+  the Overview, live toasts, webhook / e-mail channels via backend
   credentials.
 
 ### Control & safety
@@ -194,8 +202,9 @@ under *System Settings*.
   in every mode, heater returned to safe state when leaving an actuating mode.
 * Requested vs confirmed vs unknown actuator state, command log with
   validation trace (pending → sent → confirmed / failed / timeout / rejected),
-  decision trace per evaluation, auth + authorisation on every control
-  endpoint, no public relay endpoint, LLM has no path to actuators.
+  decision trace per evaluation, authorisation on every control endpoint
+  (operator level – satisfied by the local operator while `OPEN_ACCESS=true`),
+  no public relay endpoint, LLM has no path to actuators.
 
 ### Predictions & AI
 * Baseline environmental forecast (trend/persistence blend with widening
@@ -219,20 +228,23 @@ under *System Settings*.
   configured a short narrative is added and labelled *Written by MYCO AI*,
   otherwise the card says *From your data (AI offline)*. Cached 10 min per
   device.
-* Floating "Ask MYCO AI" bubble on every page (chat window on desktop, bottom
-  sheet on phones) with "Ask MYCO AI about this" shortcuts on alerts,
-  recommendations, anomalies, equipment state and batch stage.
-* Home page switches: in *Manual* mode an operator can switch the humidifier,
-  fan or heater straight from the home page – the request goes through the
-  same control service (interlocks, min switching interval, heater cut-off)
-  and the switch only shows *Running / Off* once the chamber confirms it. In
-  *Automatic* / *Watch only* mode the switches explain what to do instead of
-  sending anything.
+* The MYCO AI chat is embedded in the Overview; on Stats and Predictions a
+  floating "Ask MYCO AI" bubble opens it as a window (bottom sheet on phones).
+  "Ask MYCO AI about this" shortcuts on alerts, recommendations, anomalies and
+  the batch stage pre-fill the question. One conversation is shared between
+  both surfaces.
+* Overview switches: in *Manual* mode the humidifier, fan or heater can be
+  switched straight from the page – the request goes through the same control
+  service (interlocks, min switching interval, heater cut-off) and the switch
+  only shows *Running / Off* once the chamber confirms it. In *Automatic* /
+  *Watch only* mode the switches explain what to do instead of sending
+  anything.
 
 ### Platform
-* Users with roles viewer / operator / admin, settings UI with validation,
-  system events audit log, simulator scenario panel, ESP32 firmware example
-  with local safety logic, API docs, JSON schemas, tests.
+* Users with roles viewer / operator / admin (API; the UI has no sign-in while
+  `OPEN_ACCESS=true`), settings with validation, system events audit log,
+  simulator scenarios, ESP32 firmware example with local safety logic, API
+  docs, JSON schemas, tests.
 
 ---
 
@@ -240,16 +252,17 @@ under *System Settings*.
 
 | Status | Features |
 |---|---|
-| **Works out of the box (demo mode)** | all ten sections, simulator with scenarios (high temperature, low humidity, sensor fault, device disconnect, actuator failure, watering, recovery), 7 days of back-filled simulated history, batches/profiles/timeline, alerts, analytics, predictions, control loop against the simulated device, deterministic assistant fallback |
-| **Credential-gated** | LLM answers in the assistant (`AI_API_KEY` + reachable provider – verify with *Settings → AI diagnostics*); webhook / e-mail alert channels (`NOTIFY_WEBHOOK_URL`, `SMTP_*`); MQTT broker login |
+| **Works out of the box (demo mode)** | all three pages, simulator with scenarios (high temperature, low humidity, sensor fault, device disconnect, actuator failure, watering, recovery), 7 days of back-filled simulated history, batches/profiles/timeline, alerts, analytics, predictions, control loop against the simulated device, deterministic assistant fallback |
+| **Credential-gated** | LLM answers in the assistant (`AI_API_KEY` + reachable provider – verify with `GET /api/ai/diagnostics`, admin token); webhook / e-mail alert channels (`NOTIFY_WEBHOOK_URL`, `SMTP_*`); MQTT broker login |
 | **Hardware-gated** | LIVE mode, *Measured* readings, real relay confirmations – require the ESP32 (or `scripts/http_device.py` for a software stand-in over the HTTP transport); moisture calibration; humidifier driver behaviour |
 | **Simulated** | everything produced by `myco-sim-01`: physics-style chamber model, not a real sensor. Always tagged *Simulated* / DEMO MODE |
 
 The NVIDIA API key supplied for this project was configured in `backend/.env`
 but **could not be verified** from the build environment (no outbound network
 to the provider). The adapter follows the documented OpenAI-compatible NIM
-API; run *System Settings → AI diagnostics* (admin) to verify key, model name
-and capabilities before relying on it. Until then the assistant uses the
+API; call `GET /api/ai/diagnostics` (admin token) to verify key, model name
+and capabilities before relying on it. The Connections dialog (gear icon)
+shows whether the model is reachable. Until then the assistant uses the
 deterministic fallback and says so.
 
 ---
@@ -259,8 +272,10 @@ deterministic fallback and says so.
 See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
 (flashing, broker, topics). Short version:
 
-1. *Device Management → Add device* (kind hardware, transport mqtt or http) →
-   copy the one-time token.
+1. Register the device through the API (admin token):
+   `POST /api/devices` (kind hardware, transport mqtt or http) →
+   `POST /api/devices/{id}/token` → copy the one-time token. The device then
+   appears in the **Connections** dialog (gear icon).
 2. Flash `firmware/esp32/myco_esp32` with `config.h` (Wi-Fi, broker, device id,
    token) – or run `python3 scripts/http_device.py --device-id … --token …`
    to exercise the HTTP path without hardware.
@@ -277,12 +292,17 @@ See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
   localStorage, never logged (log redaction) and never returned by the API
   (only a 6-character hint). Tests scan the frontend for key patterns and
   provider URLs.
-* JWT sessions (PBKDF2 password hashing), roles enforced server-side; the
-  session token is kept in `sessionStorage` and dropped on 401.
+* JWT sessions (PBKDF2 password hashing), roles enforced server-side. **While
+  `OPEN_ACCESS=true` the UI has no sign-in and every anonymous request is
+  treated as the local operator** – this is a deliberate prototype setting
+  for a single grower on a trusted network. Set `OPEN_ACCESS=false` before
+  exposing the app; the token plumbing (`sessionStorage`, dropped on 401) is
+  still in place for when sign-in returns.
 * Devices authenticate with per-device tokens (hashed at rest); MQTT payloads
   with a wrong token are discarded and audited.
-* Control endpoints require operator role and go through the control service's
-  validation; the WebSocket is read-only.
+* Control endpoints require operator role (anonymous = local operator only
+  under `OPEN_ACCESS`) and go through the control service's validation; the
+  WebSocket is read-only.
 * Rate limiting and a circuit breaker protect the AI provider; uploads are
   type/size checked.
 
@@ -309,6 +329,9 @@ See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
   what the configured model supports.
 * Browser e2e tests run in jsdom (fixture-backed and live-backend harness), not
   in a real browser.
+* The UI deliberately has only three pages. Batches, species profiles, device
+  registration, user accounts, thresholds and simulator scenarios are managed
+  through the REST API (`/api/docs`) until a settings page is wanted again.
 
 ## Future improvements
 

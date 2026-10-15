@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useReducer, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Bot, CheckCircle2, Droplets, Fan, Flame, Package, RefreshCw, Send, Sparkles } from 'lucide-react';
+import { CheckCircle2, Droplets, Fan, Flame, MessageSquarePlus, RefreshCw, Sparkles } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { endpoints } from '@/api/endpoints';
+import { endpoints, type RangeKey } from '@/api/endpoints';
 import { useDevice } from '@/providers/DeviceProvider';
 import { useLive } from '@/providers/LiveProvider';
-import { useAssistant } from '@/providers/AssistantProvider';
-import { useViewMode } from '@/providers/ViewModeProvider';
-import { useAuth } from '@/providers/AuthProvider';
+import { INLINE_CHAT_ID, useAssistant } from '@/providers/AssistantProvider';
 import { useToast } from '@/providers/ToastProvider';
-import { qk, useAlerts, useBatches, useControl, useInsight, useLatest, useSystemStatus } from '@/lib/queries';
-import { Badge, Button, Card, EmptyState, ErrorState, KeyValue, Loading, Modal, Skeleton, errorMessage, severityTone } from '@/components/ui';
-import { ConfidenceTag, SourceTag } from '@/components/domain';
-import { SuggestionChips } from '@/components/assistant/ChatPanel';
-import { Advanced, TechDetails } from '@/components/Technical';
-import { fmtAgo, fmtDateTime, titleCase } from '@/lib/format';
+import { qk, useAlerts, useBatches, useControl, useInsight, useLatest, useSeries } from '@/lib/queries';
+import { Badge, Button, Card, EmptyState, ErrorState, Loading, Modal, Skeleton, errorMessage, severityTone } from '@/components/ui';
+import { AIStatusDot, ChatPanel } from '@/components/assistant/ChatPanel';
+import { useAssistantChat } from '@/components/assistant/useAssistantChat';
+import { MetricChart, gapsFromRows, toChartRows } from '@/components/charts';
+import { fmtAgo, titleCase } from '@/lib/format';
 import { cn, clamp } from '@/lib/utils';
 import type { Actuator, ActuatorEntry, AIInsight, Batch, ControlMode, InsightPoint, Reading, StageDefinition, Targets } from '@/api/types';
 
@@ -198,13 +195,7 @@ function StageDialog({ batch, target, onClose, onConfirmed }: { batch: Batch; ta
           </div>
         )}
         {target.transition_criteria && <p className="text-xs text-ink-3">{target.transition_criteria}</p>}
-        <p className="text-xs text-ink-3">
-          Stages are only changed when you confirm them – MYCO AI never guesses a stage from the calendar. Need a different date or a note? Use the{' '}
-          <Link to={`/timeline/${batch.id}`} className="text-brand hover:underline">
-            Growth timeline
-          </Link>
-          .
-        </p>
+        <p className="text-xs text-ink-3">Stages are only changed when you confirm them – MYCO AI never guesses a stage from the calendar.</p>
       </div>
     </Modal>
   );
@@ -216,11 +207,7 @@ const POINT_TONE: Record<InsightPoint['tone'], string> = { good: 'bg-brand', war
 
 function NoticedCard({ deviceId, batchId, insight }: { deviceId: string; batchId: number | null | undefined; insight: ReturnType<typeof useInsight> }) {
   const qc = useQueryClient();
-  const { ask } = useAssistant();
-  const { detailed } = useViewMode();
-  const [question, setQuestion] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const suggestions = useQuery({ queryKey: ['ai', 'suggestions'], queryFn: endpoints.aiSuggestions, staleTime: Infinity });
 
   const refresh = async () => {
     if (batchId === undefined) return;
@@ -232,12 +219,6 @@ function NoticedCard({ deviceId, batchId, insight }: { deviceId: string; batchId
       setRefreshing(false);
     }
   };
-  const submit = (q?: string) => {
-    const text = (q ?? question).trim();
-    if (!text) return;
-    ask(text);
-    setQuestion('');
-  };
   const data = insight.data;
   return (
     <Card
@@ -247,7 +228,7 @@ function NoticedCard({ deviceId, batchId, insight }: { deviceId: string; batchId
         <div className="flex items-center gap-1.5">
           {data && (
             <Badge tone={data.mode === 'llm' ? 'brand' : 'neutral'} title={data.error ?? data.label}>
-              {data.mode === 'llm' ? <><Sparkles className="h-2.5 w-2.5" /> {detailed ? `AI · ${data.model}` : 'Written by MYCO AI'}</> : detailed ? 'computed · AI offline' : 'From your data (AI offline)'}
+              {data.mode === 'llm' ? <><Sparkles className="h-2.5 w-2.5" /> Written by MYCO AI</> : 'From your data (AI offline)'}
             </Badge>
           )}
           <Button size="xs" variant="ghost" icon={<RefreshCw className={cn('h-3 w-3', refreshing && 'animate-spin')} />} onClick={refresh} disabled={refreshing || insight.isLoading} aria-label="Refresh briefing">
@@ -276,28 +257,149 @@ function NoticedCard({ deviceId, batchId, insight }: { deviceId: string; batchId
             ))}
           </ul>
           {data.data_note && <p className="text-[11px] text-ink-3">{data.data_note}</p>}
-          {detailed && data.error && <p className="text-[11px] text-amber">{data.error}</p>}
-          <div className="border-t border-line pt-3">
-            <SuggestionChips questions={suggestions.data?.questions ?? []} onPick={(q) => submit(q)} limit={3} className="mb-2" />
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                submit();
-              }}
-            >
-              <label htmlFor="home-ask" className="sr-only">
-                Ask MYCO AI
-              </label>
-              <input id="home-ask" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask a follow-up…" className="h-10 min-w-0 flex-1 rounded-full border border-line bg-surface-2 px-4 text-sm text-ink placeholder:text-ink-3 focus:border-brand focus:outline-none" maxLength={4000} />
-              <Button type="submit" variant="primary" size="sm" icon={<Send className="h-3.5 w-3.5" />} disabled={!question.trim()} aria-label="Ask" className="h-10 rounded-full px-4">
-                Ask
-              </Button>
-            </form>
-          </div>
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------- live chart */
+
+const RANGES: { key: RangeKey; label: string }[] = [
+  { key: '1h', label: 'Last hour' },
+  { key: '6h', label: '6 hours' },
+  { key: '24h', label: '24 hours' },
+];
+
+function LiveChart({ deviceId, targets }: { deviceId: string; targets: Targets | null }) {
+  const [range, setRange] = useState<RangeKey>('6h');
+  const series = useSeries(deviceId, { range }, 240);
+  const rows = useMemo(() => toChartRows(series.data?.points ?? [], series.data?.bucket_seconds ?? 60), [series.data]);
+  const gaps = useMemo(() => gapsFromRows(rows, series.data?.bucket_seconds ?? 60), [rows, series.data?.bucket_seconds]);
+  const simulated = (series.data?.sources ?? []).includes('simulation');
+  return (
+    <Card
+      title="Readings over time"
+      subtitle={series.data ? `${series.data.n_readings} readings · ${simulated ? 'simulated chamber' : 'measured by your chamber'} · green band = target` : undefined}
+      actions={
+        <div className="stem-seg inline-flex rounded-full p-1" role="group" aria-label="Chart range">
+          {RANGES.map((r) => (
+            <button key={r.key} type="button" aria-pressed={range === r.key} onClick={() => setRange(r.key)} className="min-h-[30px] rounded-full px-3 text-[12px] font-semibold">
+              {r.label}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {series.isLoading ? (
+        <Loading label="Loading readings…" />
+      ) : series.error ? (
+        <ErrorState error={series.error} onRetry={() => series.refetch()} />
+      ) : !rows.length ? (
+        <EmptyState title="No readings yet" description="The chart fills in as the chamber reports." className="py-6" />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <p className="label mb-1">Temperature (°C)</p>
+            <MetricChart rows={rows} metric="temperature_c" targets={targets} gaps={gaps} height={190} />
+          </div>
+          <div>
+            <p className="label mb-1">Humidity (%)</p>
+            <MetricChart rows={rows} metric="relative_humidity_percent" targets={targets} gaps={gaps} height={190} />
+          </div>
+        </div>
+      )}
+      {gaps.length > 0 && <p className="mt-2 text-[11px] text-ink-3">Red areas are gaps where no readings arrived.</p>}
+    </Card>
+  );
+}
+
+/* ---------------------------------------------------------------- alerts */
+
+function AlertsCard() {
+  const alerts = useAlerts({ status: 'open', limit: 8 });
+  const { ask } = useAssistant();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const ack = useMutation({
+    mutationFn: (id: number) => endpoints.acknowledgeAlert(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['alerts'] });
+      qc.invalidateQueries({ queryKey: ['system'] });
+    },
+    onError: (e) => toast.error('Could not mark the alert as seen', errorMessage(e)),
+  });
+  // the API is asked for open alerts; filter again so a stale cache never shows resolved ones
+  const list = (alerts.data ?? []).filter((a) => a.status === 'active' || a.status === 'acknowledged');
+  const active = list.filter((a) => a.status === 'active');
+  return (
+    <Card title="Needs attention" subtitle={list.length ? `${active.length} new · ${list.length - active.length} seen` : 'no open alerts'}>
+      {alerts.isLoading ? (
+        <Loading />
+      ) : alerts.error ? (
+        <ErrorState error={alerts.error} onRetry={() => alerts.refetch()} />
+      ) : !list.length ? (
+        <p className="flex items-center gap-1.5 text-sm text-ink-3">
+          <CheckCircle2 className="h-4 w-4 text-brand" aria-hidden /> Nothing needs your attention right now.
+        </p>
+      ) : (
+        <ul className="space-y-2.5">
+          {list.map((a) => (
+            <li key={a.id} className="flex items-start gap-2 text-xs">
+              <Badge tone={severityTone(a.severity)}>{a.severity}</Badge>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-ink">{a.title}</p>
+                <p className="text-ink-2">{a.message}</p>
+                <p className="mt-0.5 text-[11px] text-ink-3">
+                  {fmtAgo(a.last_seen_at)} · {a.status === 'active' ? 'new' : 'seen'}
+                  {a.occurrence_count > 1 ? ` · ${a.occurrence_count}×` : ''}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-3">
+                  <button type="button" onClick={() => ask(`What does the alert "${a.title}" mean (${a.message}) and what should I do about it?`)} className="text-[11px] text-brand hover:underline" aria-label={`Ask MYCO AI about ${a.title}`}>
+                    Ask MYCO AI
+                  </button>
+                  {a.status === 'active' && (
+                    <button type="button" onClick={() => ack.mutate(a.id)} disabled={ack.isPending} className="text-[11px] text-ink-2 hover:underline disabled:opacity-50" aria-label={`Mark ${a.title} as seen`}>
+                      Mark as seen
+                    </button>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ chat */
+
+function InlineChat({ deviceId, deviceName, simulated }: { deviceId: string; deviceName: string; simulated: boolean }) {
+  const { pendingQuestion, clearPending, conversationId, setConversationId } = useAssistant();
+  const chat = useAssistantChat({ deviceId, conversationId, onConversationChange: setConversationId, autoSelectLatest: false });
+  return (
+    <section id={INLINE_CHAT_ID} aria-label="MYCO AI assistant" className="scroll-mt-28 overflow-hidden rounded-[28px] border border-line bg-surface shadow-card">
+      <header className="flex items-center gap-3 border-b border-line py-3 pl-[18px] pr-3">
+        <span className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full bg-spore text-spore-ink" aria-hidden>
+          <Sparkles className="h-[22px] w-[22px]" />
+        </span>
+        <div className="min-w-0 flex-1 leading-tight">
+          <h2 className="font-display text-[19px] text-ink">MYCO AI</h2>
+          <AIStatusDot st={chat.status.data} />
+        </div>
+        <span className="hidden text-[11px] text-ink-3 sm:inline">
+          Talking about {deviceName}
+          {simulated ? ' (simulated)' : ''}
+        </span>
+        <button type="button" onClick={chat.startNew} title="Start a new chat" aria-label="Start a new chat" className="grid h-10 w-10 place-items-center rounded-full border border-line text-ink-3 hover:bg-surface-2 hover:text-ink">
+          <MessageSquarePlus className="h-4 w-4" />
+        </button>
+      </header>
+      <div className="flex h-[480px] flex-col">
+        <ChatPanel chat={chat} compact autoAsk={pendingQuestion} onAutoAsked={clearPending} inputId="home-chat-input" />
+      </div>
+    </section>
   );
 }
 
@@ -307,14 +409,10 @@ export default function Home() {
   const { device, deviceId, isLoading: devicesLoading, error: devicesError } = useDevice();
   const { latestReadings, devices: liveDevices } = useLive();
   const { ask } = useAssistant();
-  const { detailed } = useViewMode();
-  const { canOperate, openLogin } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const latest = useLatest(deviceId);
   const control = useControl(deviceId);
-  const status = useSystemStatus();
-  const alerts = useAlerts({ status: 'open', limit: 8 });
   const batches = useBatches({ status: 'active' });
   const activeBatch = useMemo(() => (batches.data ?? []).find((b) => b.device_id === deviceId) ?? (batches.data ?? [])[0], [batches.data, deviceId]);
   const batchId = batches.isLoading ? undefined : (activeBatch?.id ?? null);
@@ -334,14 +432,6 @@ export default function Home() {
     qc.invalidateQueries({ queryKey: ['control'] });
     qc.invalidateQueries({ queryKey: ['devices'] });
     qc.invalidateQueries({ queryKey: ['system'] });
-  };
-  const guard = (fn: () => void) => {
-    if (!canOperate) {
-      toast.warning('Sign in to change this', 'Controlling the chamber or changing a stage needs an operator or admin account.');
-      openLogin();
-      return;
-    }
-    fn();
   };
   const setMode = useMutation({
     mutationFn: (mode: ControlMode) => endpoints.setMode(deviceId!, mode),
@@ -366,17 +456,7 @@ export default function Home() {
   if (devicesLoading) return <Loading label="Loading your chamber…" />;
   if (devicesError) return <ErrorState error={devicesError} />;
   if (!device) {
-    return (
-      <EmptyState
-        title="No chamber connected yet"
-        description="Add your ESP32 chamber controller under Device Management, or turn on the demo simulator to explore the app with sample data."
-        action={
-          <Link to="/devices" className="text-xs text-brand hover:underline">
-            Open Device Management →
-          </Link>
-        }
-      />
-    );
+    return <EmptyState title="No chamber connected yet" description="Register your ESP32 chamber controller with the API (see docs/hardware.md) or enable the demo simulator on the server to explore the app with sample data." />;
   }
 
   const liveDevice = liveDevices[device.id];
@@ -395,7 +475,6 @@ export default function Home() {
   const hV = verdict('rh', shown(reading?.relative_humidity_percent, 0), targets?.humidity_min_percent, targets?.humidity_max_percent, reading?.quality?.relative_humidity_percent);
   const mode: ControlMode = control.data?.mode ?? liveDevice?.control_mode ?? device.control_mode;
   const data: AIInsight | undefined = insight.data;
-  const openAlerts = (alerts.data ?? []).filter((a) => a.status === 'active');
   const elapsedDays = estimate.data?.available && estimate.data.current_stage ? estimate.data.current_stage.elapsed_days : null;
 
   const freshness = (() => {
@@ -419,7 +498,7 @@ export default function Home() {
       toast.info('Switch to Manual first', mode === 'auto' ? "MYCO AI's controller is in charge while Automatic is on." : 'Watch-only mode never switches equipment.');
       return;
     }
-    guard(() => command.mutate({ actuator: a, state: !on }));
+    command.mutate({ actuator: a, state: !on });
   };
   const afterStageChange = () => {
     qc.invalidateQueries({ queryKey: ['batches'] });
@@ -430,11 +509,11 @@ export default function Home() {
     qc.invalidateQueries({ queryKey: ['ai', 'insight'] });
   };
 
-  const rhHint = detailed && (reading?.relative_humidity_percent ?? 0) > 90 ? 'DHT11 is only rated to ~90 % – treat as approximate' : null;
+  const rhHint = (reading?.relative_humidity_percent ?? 0) > 90 ? 'The DHT11 sensor is only rated to about 90 % – treat this as approximate' : null;
   const chamberLabel = simulated ? 'Demo data – simulated chamber' : offline ? 'Chamber disconnected' : connection === 'online' ? 'Live from your chamber' : 'Waiting for the chamber';
 
   return (
-    <div className="mx-auto max-w-[920px] pb-16 sm:pb-20">
+    <div className="mx-auto max-w-[920px] pb-10">
       <h1 className="sr-only">Overview</h1>
       <p className="mb-3 text-center text-sm text-ink-3">
         {greeting()}. Here is how <span className="font-medium text-ink-2">{device.name}</span> is doing.
@@ -451,16 +530,14 @@ export default function Home() {
             <Skeleton className="h-10 w-56 rounded-full bg-cap-ink/10" />
           ) : activeBatch ? (
             <>
-              <StageStepper batch={activeBatch} elapsedDays={elapsedDays} onPick={(s) => guard(() => setStageTarget(s))} />
+              <StageStepper batch={activeBatch} elapsedDays={elapsedDays} onPick={(s) => setStageTarget(s)} />
               <p className="text-[13px] cap-muted">
                 {activeBatch.name} · {activeBatch.species}
                 {activeBatch.is_demo ? ' · demo batch' : ''}
               </p>
             </>
           ) : (
-            <Link to="/batches" className="cap-seg inline-flex min-h-[40px] items-center rounded-full px-4 text-sm font-semibold hover:underline">
-              No batch yet – add what you are growing ›
-            </Link>
+            <span className="cap-seg inline-flex min-h-[40px] items-center rounded-full px-4 text-sm font-semibold">No batch recorded for this chamber</span>
           )}
         </div>
 
@@ -507,7 +584,7 @@ export default function Home() {
           <h2 className="font-display text-[23px]">Chamber controls</h2>
           <div className="stem-seg inline-flex rounded-full p-1" role="group" aria-label="Control mode">
             {(['auto', 'manual', 'monitor'] as ControlMode[]).map((m) => (
-              <button key={m} type="button" aria-pressed={mode === m} onClick={() => mode !== m && guard(() => setMode.mutate(m))} disabled={setMode.isPending} className="min-h-[32px] rounded-full px-3 text-[12px] font-semibold disabled:opacity-60">
+              <button key={m} type="button" aria-pressed={mode === m} onClick={() => mode !== m && setMode.mutate(m)} disabled={setMode.isPending} className="min-h-[32px] rounded-full px-3 text-[12px] font-semibold disabled:opacity-60">
                 {MODE_WORDS[m].label}
               </button>
             ))}
@@ -515,7 +592,6 @@ export default function Home() {
         </div>
         <p className="mb-2 mt-2 text-sm cap-muted">
           {offline ? 'The chamber is disconnected – the switches cannot be reached right now.' : MODE_WORDS[mode].hint}
-          {!canOperate && <span> Sign in as an operator to change anything.</span>}
         </p>
         {ACTUATORS.map(({ key, label, icon: Icon, color }) => {
           const entry = liveDevice?.actuator_state?.[key] ?? control.data?.actuators?.[key] ?? device.actuator_state?.[key];
@@ -533,7 +609,7 @@ export default function Home() {
               onClick={() => busy === null && onSwitch(key, on)}
               style={{ '--c': color } as CSSProperties}
               className={cn('stem-row flex min-h-[78px] w-full items-center gap-3.5 py-2 text-left transition-opacity', on && 'on', busy === key && 'opacity-60', !canSwitch && busy !== key && 'cursor-default')}
-              title={detailed ? (entry?.last_reason ?? undefined) : undefined}
+              title={entry?.last_reason ?? undefined}
             >
               <span className="stem-icon grid h-12 w-12 shrink-0 place-items-center rounded-full">
                 <Icon className={cn('h-[22px] w-[22px]', key === 'fan' && on && 'animate-spin-slow')} aria-hidden />
@@ -555,123 +631,18 @@ export default function Home() {
             ))}
           </ul>
         ) : null}
-        <p className="mt-4 text-[12px] cap-muted">
-          A switch sends a request; the chamber reports back what really happened. The heater always cuts out above {control.data?.config?.heater_absolute_max_temp_c ?? 32} °C.{' '}
-          <Link to="/control" className="font-semibold underline-offset-2 hover:underline">
-            All controls ›
-          </Link>
-        </p>
+        <p className="mt-4 text-[12px] cap-muted">A switch sends a request; the chamber reports back what really happened. The heater always cuts out above {control.data?.config?.heater_absolute_max_temp_c ?? 32} °C.</p>
       </section>
 
-      {/* --------------------------------------------------------- glance */}
-      <div className="mt-8 grid gap-4 lg:grid-cols-3">
-        <NoticedCard deviceId={device.id} batchId={batchId} insight={insight} />
-
-        <Card title="Needs attention" subtitle={openAlerts.length ? `${openAlerts.length} open alert${openAlerts.length === 1 ? '' : 's'}` : 'no open alerts'} actions={<Link to="/monitoring#alerts" className="text-xs text-brand hover:underline">All alerts</Link>}>
-          {alerts.isLoading ? (
-            <Loading />
-          ) : !alerts.data?.length ? (
-            <p className="flex items-center gap-1.5 text-sm text-ink-3">
-              <CheckCircle2 className="h-4 w-4 text-brand" /> Nothing needs your attention right now.
-            </p>
-          ) : (
-            <ul className="space-y-2.5">
-              {alerts.data.slice(0, 4).map((a) => (
-                <li key={a.id} className="flex items-start gap-2 text-xs">
-                  <Badge tone={severityTone(a.severity)}>{a.severity}</Badge>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-ink">{a.title}</p>
-                    <p className="text-[11px] text-ink-3">
-                      {fmtAgo(a.last_seen_at)} · {a.status === 'active' ? 'still active' : a.status}
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => ask(`What does the alert "${a.title}" mean and what should I do about it?`)} className="shrink-0 text-[11px] text-brand hover:underline" aria-label={`Ask MYCO AI about ${a.title}`}>
-                    Ask AI
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Your batch" actions={<Link to="/batches" className="text-xs text-brand hover:underline">All batches</Link>}>
-          {batches.isLoading ? (
-            <Loading />
-          ) : !activeBatch ? (
-            <EmptyState icon={<Package className="h-5 w-5" />} title="No batch yet" description="Add the mushrooms you are growing so MYCO AI can use the right targets and track their stage." className="py-4" action={<Link to="/batches" className="text-xs text-brand hover:underline">Add a batch →</Link>} />
-          ) : (
-            <div className="space-y-3 text-sm">
-              <div>
-                <Link to={`/batches/${activeBatch.id}`} className="font-semibold text-ink hover:underline">
-                  {activeBatch.name}
-                </Link>
-                <p className="text-xs text-ink-3">
-                  {activeBatch.species}
-                  {activeBatch.strain ? ` · ${activeBatch.strain}` : ''}
-                  {detailed ? ` · ${activeBatch.code}` : ''} {activeBatch.is_demo && <Badge tone="amber">demo</Badge>}
-                </p>
-              </div>
-              <p className="text-ink-2">
-                <span className="font-medium text-ink">{activeBatch.current_stage_name ?? titleCase(activeBatch.current_stage_key)}</span>
-                {elapsedDays !== null && estimate.data?.current_stage?.typical_duration_days ? ` – day ${Math.floor(elapsedDays) + 1}, usually ${estimate.data.current_stage.typical_duration_days.min}–${estimate.data.current_stage.typical_duration_days.max} days` : ''}
-                <SourceTag kind="observed" compact className="ml-1.5" />
-              </p>
-              {estimate.data?.available && estimate.data.next_stage && (
-                <p className="text-xs text-ink-3">
-                  Next: {shortStage(estimate.data.next_stage)}
-                  {estimate.data.next_stage.expected_window ? ` – could start around ${fmtDateTime(estimate.data.next_stage.expected_window.earliest, 'dd MMM')}–${fmtDateTime(estimate.data.next_stage.expected_window.latest, 'dd MMM')}` : ''}
-                  {estimate.data.harvest_window?.earliest ? `; harvest roughly ${fmtDateTime(estimate.data.harvest_window.earliest, 'dd MMM')}–${fmtDateTime(estimate.data.harvest_window.latest, 'dd MMM')}` : ''}
-                  <span className="ml-1 inline-flex items-center gap-1">
-                    <SourceTag kind="predicted" compact />
-                    <ConfidenceTag level={estimate.data.confidence?.level} basis={estimate.data.confidence?.basis} />
-                  </span>
-                </p>
-              )}
-              <div className="flex flex-wrap gap-3">
-                <Link to={`/timeline/${activeBatch.id}`} className="inline-flex items-center gap-1 text-xs text-brand hover:underline">
-                  Growth timeline <ArrowRight className="h-3 w-3" />
-                </Link>
-                <button type="button" onClick={() => ask('Which growth stage is my batch in and what should I look for next?')} className="inline-flex items-center gap-1 text-xs text-brand hover:underline">
-                  <Bot className="h-3 w-3" /> Ask about this stage
-                </button>
-              </div>
-            </div>
-          )}
-        </Card>
+      {/* ------------------------------------------------------ monitoring */}
+      <div className="mt-8 space-y-4">
+        <LiveChart deviceId={device.id} targets={targets} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <NoticedCard deviceId={device.id} batchId={batchId} insight={insight} />
+          <AlertsCard />
+        </div>
+        <InlineChat deviceId={device.id} deviceName={device.name} simulated={simulated} />
       </div>
-
-      <nav aria-label="Explore" className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm">
-        {[
-          { to: '/monitoring', label: 'Charts' },
-          { to: activeBatch ? `/timeline/${activeBatch.id}` : '/timeline', label: 'Growth timeline' },
-          { to: '/predictions', label: 'Predictions' },
-          { to: '/analytics', label: 'Reports' },
-          { to: '/assistant', label: 'MYCO AI chat' },
-        ].map((l) => (
-          <Link key={l.to} to={l.to} className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-ink-2 hover:border-brand/60 hover:text-ink">
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-
-      <Advanced>
-        <TechDetails title="Technical details" className="mt-6">
-          <KeyValue
-            items={[
-              { k: 'Device id', v: <span className="font-mono">{device.id}</span> },
-              { k: 'Transport', v: device.transport },
-              { k: 'Firmware', v: device.firmware_version ?? '—' },
-              { k: 'Connection', v: connection },
-              { k: 'Control mode', v: mode },
-              { k: 'Last reading', v: reading ? `${fmtDateTime(reading.measured_at)} · source ${reading.source}${reading.message_id ? ` · ${reading.message_id}` : ''}` : '—' },
-              { k: 'Stale after', v: `${staleAfter} s` },
-              { k: 'Targets', v: targets ? `${targets.source ?? '—'}${targets.stage_key ? ` · stage ${targets.stage_key}` : ''}` : '—' },
-              { k: 'Server time', v: status.data ? fmtDateTime(status.data.server_time, 'dd MMM HH:mm:ss') : '—' },
-              { k: 'MYCO AI', v: status.data ? (status.data.ai.configured ? `${status.data.ai.model ?? 'configured'}${status.data.ai.circuit_open ? ' · circuit open' : ''}` : 'no provider key – deterministic answers') : '—' },
-            ]}
-          />
-        </TechDetails>
-      </Advanced>
 
       {activeBatch && <StageDialog batch={activeBatch} target={stageTarget} onClose={() => setStageTarget(null)} onConfirmed={afterStageChange} />}
     </div>

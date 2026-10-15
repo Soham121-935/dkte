@@ -89,3 +89,33 @@ def test_passwords_are_hashed(db, client):
     user = db.execute(select(User).where(User.username == "admin")).scalar_one()
     assert "admin12345" not in user.password_hash
     assert user.password_hash.startswith("pbkdf2")
+
+
+def test_open_access_makes_anonymous_callers_a_local_operator(client, admin, monkeypatch):
+    """OPEN_ACCESS=true removes the sign-in: anonymous requests may control the chamber
+    and confirm stages (operator level) but still cannot administer users/settings."""
+    from app.config import get_settings
+    from tests.conftest import create_hw_device, post_telemetry
+
+    device_id, token = create_hw_device(client, admin, "esp32-open-01", transport="http", control_mode="manual")
+    assert post_telemetry(client, token, device_id).status_code == 202
+    monkeypatch.setenv("OPEN_ACCESS", "true")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().open_access is True
+        assert client.get("/api/system/status").json()["open_access"] is True
+        # operator-level actions work without a token …
+        r = client.post(f"/api/control/{device_id}/mode", json={"mode": "manual"})
+        assert r.status_code == 200, r.text
+        assert r.json()["device"]["control_mode"] == "manual"
+        cmd = client.post(f"/api/control/{device_id}/command", json={"actuator": "fan", "state": True, "reason": "open access test"})
+        assert cmd.status_code == 201, cmd.text
+        assert cmd.json()["requested_by"] == "local-operator"
+        assert cmd.json()["origin"] == "manual"
+        # … admin-only actions still do not
+        assert client.patch("/api/settings/alerts", json={"value": {}}).status_code == 403
+        assert client.get("/api/auth/users").status_code == 403
+    finally:
+        monkeypatch.setenv("OPEN_ACCESS", "false")
+        get_settings.cache_clear()
+        assert get_settings().open_access is False

@@ -3,8 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
-import { ThemeProvider } from './providers/ThemeProvider';
-import { AuthProvider } from './providers/AuthProvider';
 import { LiveProvider } from './providers/LiveProvider';
 import { DeviceProvider } from './providers/DeviceProvider';
 import { ToastProvider } from './providers/ToastProvider';
@@ -30,17 +28,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <ThemeProvider>
-          <ToastProvider>
-            <AuthProvider>
-              <LiveProvider>
-                <DeviceProvider>
-                  <App />
-                </DeviceProvider>
-              </LiveProvider>
-            </AuthProvider>
-          </ToastProvider>
-        </ThemeProvider>
+        <ToastProvider>
+          <LiveProvider>
+            <DeviceProvider>
+              <App />
+            </DeviceProvider>
+          </LiveProvider>
+        </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,

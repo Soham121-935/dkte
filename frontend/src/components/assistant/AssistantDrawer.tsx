@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Maximize2, MessageSquarePlus, Sparkles, X } from 'lucide-react';
-import { useAssistant } from '@/providers/AssistantProvider';
+import { INLINE_CHAT_ID, useAssistant } from '@/providers/AssistantProvider';
 import { useDevice } from '@/providers/DeviceProvider';
 import { AIStatusDot, ChatPanel } from './ChatPanel';
 import { useAssistantChat } from './useAssistantChat';
@@ -37,7 +37,7 @@ function ChatWindow() {
         <button type="button" onClick={() => setConversationId(null)} title="Start a new chat" aria-label="Start a new chat" className="grid h-10 w-10 place-items-center rounded-full border border-line text-ink-3 hover:bg-surface-2 hover:text-ink">
           <MessageSquarePlus className="h-4 w-4" />
         </button>
-        <Link to="/assistant" onClick={close} className="hidden h-10 w-10 place-items-center rounded-full border border-line text-ink-3 hover:bg-surface-2 hover:text-ink sm:grid" title="Open the full assistant page" aria-label="Open the full assistant page">
+        <Link to={`/#${INLINE_CHAT_ID}`} onClick={close} className="hidden h-10 w-10 place-items-center rounded-full border border-line text-ink-3 hover:bg-surface-2 hover:text-ink sm:grid" title="Continue in the Overview" aria-label="Continue in the Overview">
           <Maximize2 className="h-4 w-4" />
         </Link>
         <button type="button" onClick={close} aria-label="Close assistant" className="grid h-10 w-10 place-items-center rounded-full border border-line text-ink-3 hover:bg-surface-2 hover:text-ink">

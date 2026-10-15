@@ -15,8 +15,6 @@ import { render, waitFor, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import App from '@/App';
-import { ThemeProvider } from '@/providers/ThemeProvider';
-import { AuthProvider } from '@/providers/AuthProvider';
 import { LiveProvider } from '@/providers/LiveProvider';
 import { DeviceProvider } from '@/providers/DeviceProvider';
 import { ToastProvider } from '@/providers/ToastProvider';
@@ -24,18 +22,9 @@ import { ToastProvider } from '@/providers/ToastProvider';
 const BACKEND = process.env.MYCO_LIVE_BACKEND;
 
 const ROUTES: { path: string; expect: RegExp }[] = [
-  { path: '/', expect: /Overview/ },
-  { path: '/monitoring', expect: /Live Monitoring/ },
-  { path: '/batches', expect: /Cultivation Batches/ },
-  { path: '/batches/1', expect: /DEMO-OYS-001|Batch/ },
-  { path: '/timeline', expect: /Growth Timeline/ },
-  { path: '/timeline/1', expect: /Growth Timeline/ },
-  { path: '/predictions', expect: /AI Predictions|Predictions/ },
-  { path: '/control', expect: /Environmental Control/ },
-  { path: '/assistant', expect: /AI Cultivation Assistant/ },
-  { path: '/analytics', expect: /Analytics/ },
-  { path: '/devices', expect: /Device Management/ },
-  { path: '/settings', expect: /System Settings/ },
+  { path: '/', expect: /Chamber controls/ },
+  { path: '/stats', expect: /Stats/ },
+  { path: '/predictions', expect: /Predictions/ },
 ];
 
 const ERROR_MARKERS = [/Backend unreachable/i, /Something went wrong/i, /Request failed/i, /Server error/i, /Not found/];
@@ -86,17 +75,13 @@ describe.skipIf(!BACKEND)('live smoke render against backend', () => {
     return (
       <QueryClientProvider client={qc}>
         <MemoryRouter initialEntries={[path]}>
-          <ThemeProvider>
-            <ToastProvider>
-              <AuthProvider>
-                <LiveProvider>
-                  <DeviceProvider>
-                    <App />
-                  </DeviceProvider>
-                </LiveProvider>
-              </AuthProvider>
-            </ToastProvider>
-          </ThemeProvider>
+          <ToastProvider>
+            <LiveProvider>
+              <DeviceProvider>
+                <App />
+              </DeviceProvider>
+            </LiveProvider>
+          </ToastProvider>
         </MemoryRouter>
       </QueryClientProvider>
     );

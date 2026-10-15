@@ -205,6 +205,8 @@ export interface SystemStatus {
   ai: AIStatus;
   notifications: { name: string; enabled: boolean; detail: string }[];
   public_read: boolean;
+  /** True when the backend runs without sign-in (OPEN_ACCESS=true): every visitor is a local operator. */
+  open_access?: boolean;
 }
 
 export interface ReadingQuality {

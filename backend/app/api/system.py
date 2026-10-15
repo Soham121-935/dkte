@@ -58,6 +58,7 @@ def status(_=Depends(read_access), db: Session = Depends(get_db)):
         "ai": ai_service.status(),
         "notifications": channels_status(),
         "public_read": settings.public_read,
+        "open_access": settings.open_access,
     }
 
 

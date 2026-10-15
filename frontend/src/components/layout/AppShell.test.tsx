@@ -2,29 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '@/App';
-import { tokenStore } from '@/api/client';
-import { FIXTURES, WebSocketStub, installFetchMock, json, renderApp, type FetchMock } from '@/test/helpers';
+import { FIXTURES, WebSocketStub, installFetchMock, renderApp, type FetchMock } from '@/test/helpers';
 import { NAV_ITEMS } from './AppShell';
 
-const REQUIRED_SECTIONS = [
-  'Overview',
-  'Live Monitoring',
-  'Cultivation Batches',
-  'Growth Timeline',
-  'AI Predictions',
-  'Environmental Control',
-  'AI Cultivation Assistant',
-  'Analytics and Reports',
-  'Device Management',
-  'System Settings',
+const PAGES = [
+  { label: 'Overview', to: '/', heading: 'Overview' },
+  { label: 'Stats', to: '/stats', heading: 'Stats' },
+  { label: 'Predictions', to: '/predictions', heading: 'Predictions' },
 ];
 
 describe('navigation', () => {
-  it('exposes exactly the ten required sections with unique routes, grouped with the AI assistant up front', () => {
-    expect([...NAV_ITEMS.map((n) => n.label)].sort()).toEqual([...REQUIRED_SECTIONS].sort());
-    expect(new Set(NAV_ITEMS.map((n) => n.to)).size).toBe(10);
-    expect(NAV_ITEMS[0]).toMatchObject({ to: '/', end: true, group: 'Every day' });
-    expect(NAV_ITEMS[1]).toMatchObject({ to: '/assistant', label: 'AI Cultivation Assistant' });
+  it('exposes exactly the three pages with unique routes and the Overview first', () => {
+    expect(NAV_ITEMS.map((n) => ({ label: n.label, to: n.to }))).toEqual(PAGES.map((p) => ({ label: p.label, to: p.to })));
+    expect(new Set(NAV_ITEMS.map((n) => n.to)).size).toBe(3);
+    expect(NAV_ITEMS[0]).toMatchObject({ to: '/', end: true });
     for (const item of NAV_ITEMS) expect(item.hint.length).toBeGreaterThan(10);
   });
 });
@@ -45,33 +36,58 @@ describe('AppShell with recorded backend data', () => {
   afterEach(() => {
     fetchMock.restore();
     vi.unstubAllGlobals();
-    tokenStore.set(null);
   });
 
-  it('renders the shell, the sidebar links, the mode badge and the device selector', async () => {
+  it('renders the light shell: brand, three nav links, mode pill, demo banner – and no sign-in or theme toggle', async () => {
     renderApp(<App />);
     const nav = await screen.findByRole('navigation', { name: /main navigation/i });
-    for (const label of REQUIRED_SECTIONS) expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
+    for (const p of PAGES) expect(within(nav).getByRole('link', { name: p.label })).toBeInTheDocument();
+    expect(within(nav).getAllByRole('link')).toHaveLength(3);
     // mode comes from /api/system/status (recorded in demo mode)
     expect(await screen.findByText(FIXTURES.systemStatus.label)).toBeInTheDocument();
     expect(screen.getAllByRole('status').map((el) => el.textContent).join(' ')).toMatch(/Live feed disconnected/);
-    const select = (await screen.findAllByLabelText('Select device'))[0] as HTMLSelectElement;
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(FIXTURES.devices.map((d) => d.id));
-    // simulated devices are labelled as such and the DEMO banner is visible
     expect(screen.getAllByText(/DEMO MODE/).length).toBeGreaterThan(0);
+    // removed for now: sign-in, dark mode, simple/detailed switch, alerts bell
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /switch to (light|dark) mode/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /detailed/i })).not.toBeInTheDocument();
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
-  it('navigates to every section through the sidebar and renders each page heading', async () => {
+  it('navigates to every page through the top nav and renders each page heading without crashing', async () => {
     const user = userEvent.setup();
     renderApp(<App />);
     const nav = await screen.findByRole('navigation', { name: /main navigation/i });
-    for (const item of NAV_ITEMS) {
-      await user.click(within(nav).getByRole('link', { name: item.label }));
-      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: item.label })).toBeInTheDocument(), { timeout: 4000 });
-      expect(within(nav).getByRole('link', { name: item.label })).toHaveAttribute('aria-current', 'page');
+    for (const p of [...PAGES].reverse()) {
+      await user.click(within(nav).getByRole('link', { name: p.label }));
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: p.heading })).toBeInTheDocument(), { timeout: 4000 });
+      expect(within(nav).getByRole('link', { name: p.label })).toHaveAttribute('aria-current', 'page');
     }
     const crashes = consoleErrors.filter((e) => /The above error occurred|Uncaught|Cannot read properties/.test(e));
     expect(crashes).toEqual([]);
+  });
+
+  it('unknown routes (the removed pages) land on the Overview', async () => {
+    renderApp(<App />, { route: '/settings' });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument();
+  });
+
+  it('the gear opens Connections: chamber picker, AI status and hardware note; switching the chamber re-queries the API', async () => {
+    const user = userEvent.setup();
+    renderApp(<App />);
+    await screen.findByText(FIXTURES.systemStatus.label);
+    await user.click(screen.getByRole('button', { name: 'Connections' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Connections' });
+    const select = within(dialog).getByLabelText('Chamber') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(FIXTURES.devices.map((d) => d.id));
+    expect(select.options[0].text).toMatch(/demo simulator/);
+    expect(within(dialog).getByText('MYCO AI model')).toBeInTheDocument();
+    expect(within(dialog).getByText(/firmware\/esp32/)).toBeInTheDocument();
+    const other = FIXTURES.devices[1].id;
+    await user.selectOptions(select, other);
+    await waitFor(() => expect(fetchMock.calls.some((c) => c.url.startsWith('/api/telemetry/latest') && c.url.includes(`device_id=${other}`))).toBe(true));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Connections' })).not.toBeInTheDocument());
   });
 
   it('shows the backend-unreachable state instead of crashing when the API is down', async () => {
@@ -79,38 +95,9 @@ describe('AppShell with recorded backend data', () => {
     globalThis.fetch = vi.fn(async () => {
       throw new TypeError('Failed to fetch');
     }) as unknown as typeof fetch;
-    renderApp(<App />, { route: '/monitoring' });
+    renderApp(<App />, { route: '/stats' });
     expect(await screen.findByText(/BACKEND UNREACHABLE/)).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent(/DISCONNECTED/);
-    expect(screen.getAllByText('No chamber registered yet').length).toBeGreaterThan(0);
-  });
-
-  it('opens the login dialog, shows backend errors and signs in with a bearer token', async () => {
-    const user = userEvent.setup();
-    fetchMock.on('POST', /^\/api\/auth\/login$/, ({ body }) => {
-      const b = body as { username: string; password: string };
-      if (b.password !== 'admin12345') return json(401, { detail: 'Invalid credentials' });
-      return { access_token: 'tok-abc', token_type: 'bearer', user: { id: 1, username: b.username, role: 'admin', is_active: true, created_at: '2026-01-01T00:00:00Z' } };
-    });
-    fetchMock.on('GET', /^\/api\/auth\/me$/, ({ headers }) => (headers.authorization === 'Bearer tok-abc' ? { id: 1, username: 'admin', role: 'admin' } : json(401, { detail: 'Not authenticated' })));
-    renderApp(<App />);
-    await user.click(await screen.findByRole('button', { name: /sign in/i }));
-    const dialog = await screen.findByRole('dialog');
-    await user.type(within(dialog).getByLabelText(/username/i), 'admin');
-    await user.type(within(dialog).getByLabelText(/password/i), 'wrong-pass');
-    await user.click(within(dialog).getByRole('button', { name: /^sign in$/i }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Invalid credentials');
-    await user.clear(within(dialog).getByLabelText(/password/i));
-    await user.type(within(dialog).getByLabelText(/password/i), 'admin12345');
-    await user.click(within(dialog).getByRole('button', { name: /^sign in$/i }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(tokenStore.get()).toBe('tok-abc');
-    expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'admin · admin')).toBeInTheDocument();
-    // subsequent requests carry the token; the login request itself did not
-    const loginCall = fetchMock.calls.find((c) => c.url === '/api/auth/login');
-    expect(loginCall?.headers.authorization).toBeUndefined();
-    await user.click(screen.getByRole('button', { name: /sign out/i }));
-    expect(tokenStore.get()).toBeNull();
   });
 
   it('reflects live WebSocket events (alert notification + reconnect banner)', async () => {
@@ -127,7 +114,7 @@ describe('AppShell with recorded backend data', () => {
         alert: { id: 991, rule_key: 'temperature_out_of_range', severity: 'critical', status: 'active', title: 'Temperature above range', message: 'Temperature 27.5 °C exceeds 24 °C', device_id: 'myco-sim-01', batch_id: null, source: 'simulation', opened_at: new Date().toISOString(), last_seen_at: new Date().toISOString(), occurrence_count: 1, acknowledged_at: null, acknowledged_by: null, resolved_at: null, resolved_reason: null, data: {} },
       }),
     );
-    expect(await screen.findByText('Temperature above range')).toBeInTheDocument();
+    expect((await screen.findAllByText('Temperature above range')).length).toBeGreaterThan(0);
     act(() => ws.onclose?.());
     expect(await screen.findByText(/Live feed disconnected/)).toBeInTheDocument();
   });

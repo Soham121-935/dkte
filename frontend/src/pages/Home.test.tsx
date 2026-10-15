@@ -1,22 +1,16 @@
 /**
- * The Sporehouse-style home page: readings in plain words against the real
+ * The Sporehouse-style Overview: readings in plain words against the real
  * targets, the stage stepper (manual confirmation only), chamber switches that
- * respect the control mode / auth / connection, and honest data labelling.
+ * respect the control mode / connection, the live chart, open alerts and
+ * honest data labelling. There is no sign-in: the backend runs in open-access
+ * mode, so every visitor is the local operator.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '@/App';
-import { tokenStore } from '@/api/client';
 import { FIXTURES, WebSocketStub, installFetchMock, json, renderApp, type FetchMock } from '@/test/helpers';
 import { shortStage, verdict } from './Home';
-
-const OPERATOR = { id: 2, username: 'grower', role: 'operator', is_active: true, created_at: '2026-01-01T00:00:00Z' };
-
-function signInAsOperator(fetchMock: FetchMock) {
-  tokenStore.set('tok-operator');
-  fetchMock.on('GET', /^\/api\/auth\/me$/, ({ headers }) => (headers.authorization === 'Bearer tok-operator' ? OPERATOR : json(401, { detail: 'Not authenticated' })));
-}
 
 describe('verdict words', () => {
   it('turns a value and its target band into grower words without inventing anything', () => {
@@ -56,7 +50,6 @@ describe('home page', () => {
   afterEach(() => {
     fetchMock.restore();
     vi.unstubAllGlobals();
-    tokenStore.set(null);
   });
 
   it('shows the chamber as a cap with big readings in plain words, the real targets and the data source', async () => {
@@ -75,14 +68,38 @@ describe('home page', () => {
     expect(within(cap).getByText(/Simulated reading/)).toBeInTheDocument();
     // stage stepper: previous / current (with day count) / next
     const stage = within(cap).getByRole('group', { name: 'Growing stage' });
-    expect(within(stage).getByRole('button', { pressed: true })).toHaveTextContent(/Pinning\s*· day 3/);
+    await waitFor(() => expect(within(stage).getByRole('button', { pressed: true })).toHaveTextContent(/Pinning\s*· day 3/));
     expect(within(stage).getByRole('button', { name: /Colonising/ })).toBeInTheDocument();
     expect(within(stage).getByRole('button', { name: /Fruiting/ })).toBeInTheDocument();
     // the briefing headline + next step and the ask button live in the cap
     expect(within(cap).getByText(FIXTURES.aiInsight.headline)).toBeInTheDocument();
     expect(within(cap).getByRole('button', { name: /Ask MYCO AI what to do/ })).toBeInTheDocument();
-    // no engineering jargon in the simple view
+    // no engineering jargon on the page
     expect(screen.getByRole('main').textContent).not.toMatch(/hysteresis|transport|rule_key|message_id|myco-sim-01/);
+  });
+
+  it('shows the live chart with a range picker, and the open alerts with "mark as seen"', async () => {
+    const user = userEvent.setup();
+    const acked: number[] = [];
+    fetchMock.on('POST', /^\/api\/alerts\/(\d+)\/acknowledge$/, ({ url }) => {
+      acked.push(Number(url.pathname.split('/')[3]));
+      return { ...FIXTURES.alerts[0], status: 'acknowledged' };
+    });
+    renderApp(<App />);
+    // chart card: default range 6h, switching to 24h re-queries the series endpoint
+    const range = await screen.findByRole('group', { name: 'Chart range' });
+    expect(within(range).getByRole('button', { pressed: true })).toHaveTextContent('6 hours');
+    await waitFor(() => expect(fetchMock.calls.some((c) => c.url.startsWith('/api/telemetry/series') && c.url.includes('range=6h'))).toBe(true));
+    await user.click(within(range).getByRole('button', { name: '24 hours' }));
+    await waitFor(() => expect(fetchMock.calls.some((c) => c.url.startsWith('/api/telemetry/series') && c.url.includes('range=24h'))).toBe(true));
+    expect(screen.getByText('Temperature (°C)')).toBeInTheDocument();
+    expect(screen.getByText('Humidity (%)')).toBeInTheDocument();
+    expect(screen.getByText(/readings · simulated chamber/)).toBeInTheDocument();
+    // alerts: recorded open alerts are listed with their message; acknowledging posts to the API
+    const first = FIXTURES.alerts.find((a) => a.status === 'active')!;
+    expect(await screen.findByText(first.message)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: `Mark ${first.title} as seen` }));
+    await waitFor(() => expect(acked).toEqual([first.id]));
   });
 
   it('shows the equipment as switches that follow the chamber\'s confirmed state and the control mode', async () => {
@@ -100,7 +117,6 @@ describe('home page', () => {
 
   it('never sends a command while the controller is in automatic mode – it explains what to do instead', async () => {
     const user = userEvent.setup();
-    signInAsOperator(fetchMock);
     renderApp(<App />);
     const stem = await screen.findByRole('region', { name: 'Chamber controls' });
     await user.click(await within(stem).findByRole('switch', { name: 'Fan' }));
@@ -108,39 +124,38 @@ describe('home page', () => {
     expect(fetchMock.calls.filter((c) => c.url.includes('/command'))).toHaveLength(0);
   });
 
-  it('in manual mode an operator can switch equipment; the request goes to the control service and waits for confirmation', async () => {
+  it('switching to Manual posts the mode change; in manual mode a switch goes to the control service and waits for confirmation', async () => {
     const user = userEvent.setup();
-    signInAsOperator(fetchMock);
-    fetchMock.on('GET', /^\/api\/control\/myco-sim-01$/, () => ({ ...FIXTURES.control, mode: 'manual' }));
+    let mode = 'auto';
+    fetchMock.on('GET', /^\/api\/control\/myco-sim-01$/, () => ({ ...FIXTURES.control, mode }));
+    fetchMock.on('POST', /^\/api\/control\/myco-sim-01\/mode$/, ({ body }) => {
+      mode = (body as { mode: string }).mode;
+      return { device: { ...FIXTURES.control.device, control_mode: mode }, evaluation: null };
+    });
     fetchMock.on('POST', /^\/api\/control\/myco-sim-01\/command$/, ({ body }) => {
       const b = body as { actuator: string; state: boolean };
       return json(201, { ...FIXTURES.commands[0], id: 999, actuator: b.actuator, requested_state: b.state, status: 'sent', result_state: null, origin: 'manual' });
     });
     renderApp(<App />);
     const stem = await screen.findByRole('region', { name: 'Chamber controls' });
+    const modes = await within(stem).findByRole('group', { name: 'Control mode' });
+    await user.click(within(modes).getByRole('button', { name: 'Manual' }));
+    await waitFor(() => expect(fetchMock.calls.filter((c) => c.url.endsWith('/mode'))).toHaveLength(1));
+    expect(fetchMock.calls.find((c) => c.url.endsWith('/mode'))!.body).toEqual({ mode: 'manual' });
+    expect(await screen.findByText('Manual mode is on')).toBeInTheDocument();
     await within(stem).findByText(/You are in charge/);
     await user.click(within(stem).getByRole('switch', { name: 'Fan' }));
     await waitFor(() => expect(fetchMock.calls.filter((c) => c.url.endsWith('/command'))).toHaveLength(1));
     const call = fetchMock.calls.find((c) => c.url.endsWith('/command'))!;
     expect(call.method).toBe('POST');
-    expect(call.headers.authorization).toBe('Bearer tok-operator');
+    // no session token exists – the backend's open-access mode makes this the local operator
+    expect(call.headers.authorization).toBeUndefined();
     expect(call.body).toMatchObject({ actuator: 'fan', state: true });
     expect(await screen.findByText(/Fan → on sent/)).toBeInTheDocument();
   });
 
-  it('asks viewers to sign in before changing a stage or taking manual control', async () => {
+  it('the next stage is confirmed from the cap; nothing is written until the grower says yes', async () => {
     const user = userEvent.setup();
-    renderApp(<App />);
-    const cap = await screen.findByRole('region', { name: 'Chamber climate' });
-    const stage = await within(cap).findByRole('group', { name: 'Growing stage' });
-    await user.click(within(stage).getByRole('button', { name: /Fruiting/ }));
-    expect(await screen.findByRole('dialog', { name: /sign in/i })).toBeInTheDocument();
-    expect(fetchMock.calls.filter((c) => c.method === 'POST' && c.url.endsWith('/batches/1/stage'))).toHaveLength(0);
-  });
-
-  it('an operator confirms the next stage from the cap; nothing is written until they say yes', async () => {
-    const user = userEvent.setup();
-    signInAsOperator(fetchMock);
     fetchMock.on('POST', /^\/api\/batches\/1\/stage$/, ({ body }) => json(201, { ...FIXTURES.batches[0], current_stage_key: (body as { stage_key: string }).stage_key, current_stage_name: 'Fruiting-body development' }));
     renderApp(<App />);
     const cap = await screen.findByRole('region', { name: 'Chamber climate' });
@@ -160,7 +175,6 @@ describe('home page', () => {
 
   it('a disconnected chamber is said so plainly and the switches stop sending', async () => {
     const user = userEvent.setup();
-    signInAsOperator(fetchMock);
     const offline = FIXTURES.devices.map((d) => (d.id === 'myco-sim-01' ? { ...d, connection_status: 'offline', control_mode: 'manual' } : d));
     fetchMock.on('GET', /^\/api\/devices$/, () => offline);
     fetchMock.on('GET', /^\/api\/control\/myco-sim-01$/, () => ({ ...FIXTURES.control, mode: 'manual', device: { ...FIXTURES.control.device, connection_status: 'offline' } }));
