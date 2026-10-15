@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sporehouse · Mushroom room control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Young+Serif&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+:root{--loam:#0e1a16;--loam2:#16261f;--line:#2a3f34;--cap1:#c6d5e2;--cap2:#93aec5;--ink:#12201c;--stem:#e3e9df;--glow:#f2b8c8;--mist:#e8efe5;--muted:#9bb0a4;
+--serif:'Young Serif','Iowan Old Style',Georgia,serif;--sans:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;color-scheme:dark}
+html{background:var(--loam)}
+body{font:400 16px/1.5 var(--sans);color:var(--mist);min-height:100dvh;background:radial-gradient(70% 38% at 50% 0,#1d3a2d 0,transparent 70%),var(--loam);padding:env(safe-area-inset-top) 0 calc(100px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--glow);outline-offset:3px}
+.cap :focus-visible,.stem :focus-visible{outline-color:var(--ink)}
+svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+header{display:flex;align-items:center;gap:10px;max-width:920px;margin:0 auto;padding:16px 20px}
+.brand{display:flex;align-items:center;gap:10px;font:400 21px var(--serif);margin-right:auto}
+.brand svg{width:32px;height:32px;color:var(--cap2)}
+.pill{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--line);border-radius:99px;font-size:14px;color:var(--muted)}
+.pill i{width:8px;height:8px;border-radius:50%;background:#d9a441}
+.pill.on i{background:#6fd08c;box-shadow:0 0 0 4px rgba(111,208,140,.2)}
+.pill.off i{background:#e0674a}
+.ib{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:none;display:grid;place-items:center;cursor:pointer}
+
+main{max-width:920px;margin:6px auto 0;padding:0 16px}
+.cap{background:linear-gradient(180deg,var(--cap1),var(--cap2));color:var(--ink);border-radius:50% 50% 28px 28px/150px 150px 28px 28px;padding:64px 28px 32px;text-align:center}
+.seg{display:inline-flex;padding:4px;border-radius:99px;background:rgba(18,32,28,.14)}
+.seg button{border:0;background:none;font-weight:600;font-size:14px;padding:0 18px;min-height:40px;border-radius:99px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--cap1)}
+.reads{display:grid;grid-template-columns:1fr 1fr;margin-top:26px}
+.read{padding:0 clamp(8px,3vw,40px)}
+.read+.read{border-left:1px solid rgba(18,32,28,.2)}
+.lab{font-size:15px;font-weight:600}
+.val{font:400 clamp(52px,11vw,88px)/1.05 var(--serif);letter-spacing:-.02em}
+.u{font-size:.34em;margin-left:4px;letter-spacing:0}
+.msg{font-weight:600;font-size:17px}
+.track{position:relative;height:10px;border-radius:99px;background:rgba(18,32,28,.16);margin:16px 0 8px}
+.band{position:absolute;top:0;bottom:0;border-radius:99px;background:rgba(18,32,28,.34);transition:left .3s,width .3s}
+.pin{position:absolute;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;background:var(--ink);border:3px solid var(--cap1);transition:left .8s ease,background .3s}
+.pin.bad{background:#b3461f}
+.rng{font-size:14px;opacity:.75}
+.note{margin:28px auto 0;max-width:560px;display:flex;gap:10px 14px;align-items:center;justify-content:center;flex-wrap:wrap;font-weight:500}
+.ask{border:0;background:var(--ink);color:var(--cap1);font-weight:600;font-size:14px;min-height:40px;padding:0 16px;border-radius:99px;cursor:pointer}
+.ask[hidden]{display:none}
+.gills{height:70px;margin:0 2%;background:repeating-conic-gradient(from 0deg at 50% -90px,rgba(147,174,197,.6) 0 .45deg,transparent .45deg 1.6deg);-webkit-mask:linear-gradient(#000 25%,transparent);mask:linear-gradient(#000 25%,transparent);clip-path:ellipse(50% 100% at 50% 0)}
+
+.stem{width:min(100%,460px);margin:-8px auto 0;background:var(--stem);color:var(--ink);border-radius:0 0 56px 56px/0 0 40px 40px;padding:26px 24px 36px}
+.stem h2{font:400 23px var(--serif)}
+.hint{font-size:14px;opacity:.72;margin:2px 0 12px}
+.dev{width:100%;display:flex;align-items:center;gap:14px;min-height:78px;padding:8px 0;border:0;border-top:1px solid rgba(18,32,28,.14);background:none;text-align:left;cursor:pointer;transition:opacity .2s}
+.ic{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:rgba(18,32,28,.08);transition:background .25s,color .25s}
+.on .ic{background:var(--c);color:#fff}
+.on .spin{animation:spin 1.1s linear infinite}
+.tx{flex:1;display:grid}.tx b{font-weight:700;font-size:17px}.tx small{font-size:14px;opacity:.72}
+.sw{width:56px;height:32px;border-radius:99px;background:rgba(18,32,28,.26);padding:3px;transition:background .25s}
+.sw i{display:block;width:26px;height:26px;border-radius:50%;background:#fff;transition:transform .25s}
+.on .sw{background:var(--c)}.on .sw i{transform:translateX(24px)}
+.busy{opacity:.55;pointer-events:none}
+
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;display:flex;align-items:center;gap:10px;height:60px;padding:0 24px 0 18px;border:0;border-radius:99px;background:var(--glow);color:#2a1219;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.45);animation:glow 3.4s ease-out infinite;transition:transform .2s,opacity .2s}
+.fab.hide{transform:scale(.8);opacity:0;pointer-events:none}
+.chat{position:fixed;right:16px;bottom:16px;z-index:30;width:min(392px,calc(100vw - 32px));height:min(600px,calc(100dvh - 32px));display:flex;flex-direction:column;background:var(--loam2);border:1px solid var(--line);border-radius:28px;box-shadow:0 24px 60px rgba(0,0,0,.6);transform:translateY(24px) scale(.96);transform-origin:bottom right;opacity:0;pointer-events:none;transition:transform .25s,opacity .25s}
+.chat.open{transform:none;opacity:1;pointer-events:auto}
+.ch{display:flex;align-items:center;gap:12px;padding:14px 14px 12px 18px;border-bottom:1px solid var(--line)}
+.av{width:42px;height:42px;border-radius:50%;background:var(--glow);color:#2a1219;display:grid;place-items:center}
+.ch div{flex:1;line-height:1.25}.ch b{font:400 19px var(--serif)}.ch small{display:block;color:var(--muted);font-size:13px}
+#log{flex:1;overflow:auto;padding:16px}
+.b{max-width:88%;padding:11px 14px;border-radius:18px;margin-bottom:10px;font-size:15px;line-height:1.5;width:fit-content}
+.bot{background:#21392f;border-bottom-left-radius:6px}
+.me{margin-left:auto;background:var(--glow);color:#2a1219;border-bottom-right-radius:6px}
+.dots i{display:inline-block;width:7px;height:7px;margin:0 2px;border-radius:50%;background:var(--muted);animation:blink 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:0 16px 12px}
+.chips button{white-space:nowrap;border:1px solid var(--line);background:none;border-radius:99px;padding:0 14px;min-height:40px;font-weight:500;font-size:14px;cursor:pointer}
+.in{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+.f{flex:1;min-width:0;height:48px;border-radius:99px;border:1px solid var(--line);background:var(--loam);color:var(--mist);padding:0 18px;font:inherit;font-size:16px}
+.send{width:48px;height:48px;flex:none;border:0;border-radius:50%;background:var(--glow);color:#2a1219;display:grid;place-items:center;cursor:pointer}
+
+dialog{margin:auto;width:min(440px,calc(100vw - 32px));border:1px solid var(--line);border-radius:28px;background:var(--loam2);color:var(--mist);padding:26px}
+dialog::backdrop{background:rgba(5,10,8,.72)}
+dialog h2{font:400 25px var(--serif);margin-bottom:18px}
+dialog label{display:grid;gap:6px;font-weight:600;font-size:14px;margin-bottom:16px}
+dialog label small{font-weight:400;color:var(--muted);font-size:13px}
+dialog .f{border-radius:14px;width:100%}
+dialog .chk{display:flex;align-items:center;gap:12px;font-weight:500;font-size:15px}
+.chk input{width:22px;height:22px;accent-color:var(--glow)}
+.acts{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+.btn{height:46px;padding:0 22px;border-radius:99px;border:1px solid var(--line);background:none;font-weight:600;cursor:pointer}
+.btn.pri{background:var(--glow);color:#2a1219;border-color:transparent}
+.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));z-index:50;max-width:calc(100vw - 32px);transform:translate(-50%,-90px);background:#f6dcd2;color:#3a140a;padding:12px 18px;border-radius:99px;font-weight:600;font-size:14px;transition:transform .3s}
+.toast.show{transform:translate(-50%,0)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blink{50%{opacity:.25}}
+@keyframes glow{0%{box-shadow:0 0 0 0 rgba(242,184,200,.55),0 10px 30px rgba(0,0,0,.45)}70%,100%{box-shadow:0 0 0 20px rgba(242,184,200,0),0 10px 30px rgba(0,0,0,.45)}}
+@media(max-width:560px){
+ .cap{border-radius:50% 50% 24px 24px/100px 100px 24px 24px;padding:50px 10px 26px}
+ .chat{right:0;bottom:0;width:100%;height:84dvh;border-radius:28px 28px 0 0}
+ .pill b{display:none}.stem{padding:22px 18px 32px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3s6 6.4 6 11a6 6 0 0 1-12 0c0-4.6 6-11 6-11z"/></symbol>
+<symbol id="i-fan" viewBox="0 0 24 24"><ellipse cx="12" cy="6.8" rx="2.6" ry="4.2"/><ellipse cx="12" cy="6.8" rx="2.6" ry="4.2" transform="rotate(120 12 12)"/><ellipse cx="12" cy="6.8" rx="2.6" ry="4.2" transform="rotate(240 12 12)"/><circle cx="12" cy="12" r="1.2"/></symbol>
+<symbol id="i-fire" viewBox="0 0 24 24"><path d="M12 3c1 3 5 5.500 5 10.200a5 5 0 0 1-10 0c0-2 1-3.300 2.200-4.400.2 1.500.8 2.400 1.800 2.800C10.700 9 10.800 5.800 12 3z"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3l1.900 5.100L18 10l-5.100 1.900L11 17l-1.900-5.100L4 10l5.100-1.900z"/><path d="M18.500 15v5M16 17.500h5"/></symbol>
+<symbol id="i-set" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+</defs></svg>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 17C3 9.500 9 4 16 4s13 5.500 13 13c0 1-1 1.500-2 1.500H5c-1 0-2-.5-2-1.500z" fill="currentColor"/><path d="M12 20h8l-1 8a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z" fill="currentColor" opacity=".65"/><circle cx="11" cy="11.500" r="1.700" fill="#0e1a16" opacity=".35"/><circle cx="19.500" cy="9.500" r="1.300" fill="#0e1a16" opacity=".35"/></svg>
+    Sporehouse
+  </div>
+  <div class="pill" id="pill"><i></i><b id="pillTxt">Demo data</b></div>
+  <button class="ib" id="setBtn" aria-label="Settings"><svg class="i"><use href="#i-set"/></svg></button>
+</header>
+
+<main>
+  <section class="cap" aria-label="Room climate">
+    <div class="seg" role="group" aria-label="Growing stage">
+      <button data-s="colonizing" aria-pressed="false">Colonizing</button>
+      <button data-s="fruiting" aria-pressed="true">Fruiting</button>
+    </div>
+    <div class="reads">
+      <div class="read" id="rt">
+        <p class="lab">Temperature</p>
+        <p class="val"><span class="n">--</span><span class="u">°C</span></p>
+        <p class="msg">Waiting for sensor</p>
+        <div class="track"><i class="band"></i><b class="pin"></b></div>
+        <p class="rng">&nbsp;</p>
+      </div>
+      <div class="read" id="rh">
+        <p class="lab">Humidity</p>
+        <p class="val"><span class="n">--</span><span class="u">%</span></p>
+        <p class="msg">Waiting for sensor</p>
+        <div class="track"><i class="band"></i><b class="pin"></b></div>
+        <p class="rng">&nbsp;</p>
+      </div>
+    </div>
+    <div class="note" aria-live="polite"><span id="note">Checking your room…</span><button class="ask" id="askBtn" hidden>Ask Mycel what to do</button></div>
+  </section>
+  <div class="gills" aria-hidden="true"></div>
+
+  <section class="stem" aria-label="Room controls">
+    <h2>Room controls</h2>
+    <p class="hint" id="hint">Tap to switch on or off.</p>
+    <button class="dev" role="switch" aria-checked="false" data-d="humidifier" style="--c:#237c99">
+      <span class="ic"><svg class="i"><use href="#i-drop"/></svg></span>
+      <span class="tx"><b>Humidifier</b><small>Off</small></span>
+      <span class="sw" aria-hidden="true"><i></i></span>
+    </button>
+    <button class="dev" role="switch" aria-checked="false" data-d="fan" style="--c:#4f7f3f">
+      <span class="ic"><svg class="i spin"><use href="#i-fan"/></svg></span>
+      <span class="tx"><b>Fan</b><small>Off</small></span>
+      <span class="sw" aria-hidden="true"><i></i></span>
+    </button>
+    <button class="dev" role="switch" aria-checked="false" data-d="heater" style="--c:#c4601a">
+      <span class="ic"><svg class="i"><use href="#i-fire"/></svg></span>
+      <span class="tx"><b>Heater</b><small>Off</small></span>
+      <span class="sw" aria-hidden="true"><i></i></span>
+    </button>
+  </section>
+</main>
+
+<button class="fab" id="fab" aria-label="Open chat with Mycel"><svg class="i"><use href="#i-spark"/></svg>Ask Mycel</button>
+
+<aside class="chat" id="chat" role="dialog" aria-label="Chat with Mycel" inert>
+  <div class="ch">
+    <span class="av"><svg class="i"><use href="#i-spark"/></svg></span>
+    <div><b>Mycel</b><small>Ask about your room</small></div>
+    <button class="ib" id="closeChat" aria-label="Close chat"><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <div id="log"></div>
+  <div class="chips" id="chips">
+    <button>Is my room okay right now?</button>
+    <button>How do I raise humidity?</button>
+    <button>When should I start fruiting?</button>
+  </div>
+  <form class="in" id="chatForm">
+    <input class="f" id="q" placeholder="Type your question" autocomplete="off" aria-label="Your question">
+    <button class="send" aria-label="Send"><svg class="i"><use href="#i-up"/></svg></button>
+  </form>
+</aside>
+
+<dialog id="dlg">
+  <form id="setForm" method="dialog">
+    <h2>Connections</h2>
+    <label>ESP32 address<input class="f" id="fEsp" placeholder="192.168.1.50" inputmode="url" autocomplete="off"><small>Leave empty if this page is served by the ESP32 itself.</small></label>
+    <label>Anthropic API key<input class="f" id="fKey" type="password" placeholder="sk-ant-…" autocomplete="off"><small>Saved only in this browser. For a live farm, route chat through your own server.</small></label>
+    <label class="chk"><input type="checkbox" id="fDemo">Use demo data (turn off to read your ESP32)</label>
+    <div class="acts"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn pri">Save changes</button></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- Config ---------- */
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const cfg={esp:'',key:'',demo:true,stage:'fruiting',model:'claude-sonnet-5-5'}; // change model here
+try{Object.assign(cfg,JSON.parse(localStorage.getItem('sporehouse')||'{}'))}catch(e){}
+const persist=()=>{try{localStorage.setItem('sporehouse',JSON.stringify(cfg))}catch(e){}};
+const STAGES={colonizing:{name:'Colonizing',t:[24,27],h:[70,80]},fruiting:{name:'Fruiting',t:[18,22],h:[85,95]}}; // edit ideal ranges for your species
+const S={t:21.4,h:88,dev:{humidifier:false,fan:false,heater:false}};
+const base=()=>cfg.esp?'http://'+cfg.esp:'';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms)),clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+
+/* ---------- Painting ---------- */
+function gauge(id,v,[mn,mx],[lo,hi],unit,dig,words){
+  const el=$(id),pc=x=>clamp((x-mn)/(mx-mn)*100,0,100),s=v<lo?-1:v>hi?1:0;
+  el.querySelector('.n').textContent=v.toFixed(dig);
+  el.querySelector('.msg').textContent=words[s+1];
+  const b=el.querySelector('.band');b.style.left=pc(lo)+'%';b.style.width=(pc(hi)-pc(lo))+'%';
+  const p=el.querySelector('.pin');p.style.left=pc(v)+'%';p.classList.toggle('bad',!!s);
+  el.querySelector('.rng').textContent=`Ideal ${lo}–${hi} ${unit}`;
+  return s;
+}
+let issues=[];
+function paint(){
+  const st=STAGES[cfg.stage];
+  const ts=gauge('#rt',S.t,[10,35],st.t,'°C',1,['A little cool','Just right','Running warm']);
+  const hs=gauge('#rh',S.h,[40,100],st.h,'%',0,['Air is dry','Nicely humid','Very damp']);
+  issues=[];
+  if(ts<0)issues.push('It’s a little cool. The heater can warm things up.');
+  if(ts>0)issues.push('It’s running warm. Switch on the fan to cool the room.');
+  if(hs<0)issues.push('The air is dry. Try the humidifier.');
+  if(hs>0)issues.push('It’s very damp. Run the fan to air it out.');
+  $('#note').textContent=issues.length?issues.join(' '):`Your mushrooms are comfortable. Conditions are ideal for ${st.name.toLowerCase()}.`;
+  $('#askBtn').hidden=!issues.length;
+  $$('.seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s===cfg.stage));
+  $$('.dev').forEach(b=>{const on=S.dev[b.dataset.d];b.classList.toggle('on',on);b.setAttribute('aria-checked',on);
+    b.querySelector('small').textContent=b.classList.contains('busy')?'Sending…':on?'Running':'Off'});
+  $('#hint').textContent=cfg.demo?'Demo mode: nothing is connected yet.':'Tap to switch. Changes go straight to your ESP32.';
+}
+function status(k){const p=$('#pill');p.className='pill '+k;$('#pillTxt').textContent={demo:'Demo data',on:'ESP32 online',off:'ESP32 offline'}[k]}
+
+/* ---------- ESP32 link ----------
+   GET  {esp}/api/status  -> {"temp":21.4,"humidity":88,"humidifier":false,"fan":true,"heater":false}
+   POST {esp}/api/control -> body {"device":"fan","state":true}  (reply 200)
+   The ESP32 must send the header  Access-Control-Allow-Origin: *  if this page is hosted elsewhere. */
+function sim(){const d=S.dev,r=()=>Math.random()-.5;
+  S.t=clamp(S.t+.02*(19-S.t)+(d.heater?.3:0)-(d.fan?.06:0)+r()*.06,10,35);
+  S.h=clamp(S.h+.02*(65-S.h)+(d.humidifier?1.4:0)-(d.fan?.5:0)-(d.heater?.2:0)+r()*.3,40,99)}
+async function poll(){
+  if(cfg.demo){sim();status('demo')}
+  else try{
+    const r=await fetch(base()+'/api/status',{signal:AbortSignal.timeout(3000)}),j=await r.json();
+    S.t=+j.temp;S.h=+j.humidity;for(const k in S.dev)if(!$(`.dev[data-d=${k}]`).classList.contains('busy'))S.dev[k]=!!j[k];
+    status('on');
+  }catch(e){status('off')}
+  paint();
+}
+async function toggle(b){
+  const d=b.dataset.d,next=!S.dev[d];b.classList.add('busy');paint();
+  try{
+    if(cfg.demo)await sleep(250);
+    else{const r=await fetch(base()+'/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device:d,state:next}),signal:AbortSignal.timeout(4000)});if(!r.ok)throw 0}
+    S.dev[d]=next;
+  }catch(e){toast(`Couldn’t reach the ESP32. The ${d} was not changed.`)}
+  b.classList.remove('busy');paint();
+}
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),3800)}
+
+/* ---------- Chat (Anthropic API) ---------- */
+const hist=[],log=$('#log'),chat=$('#chat');
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const md=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+function bubble(role,html){const d=document.createElement('div');d.className='b '+role;d.innerHTML=html;log.append(d);log.scrollTop=log.scrollHeight;return d}
+const context=()=>{const st=STAGES[cfg.stage],d=S.dev,o=v=>v?'on':'off';
+  return `You are Mycel, a friendly assistant for a mushroom farm. Be warm, practical and brief (at most 4 short sentences, no headings). You cannot control equipment: tell the grower which switch to use. Live room data: stage ${st.name}; temperature ${S.t.toFixed(1)}°C (ideal ${st.t.join('–')}); humidity ${Math.round(S.h)}% (ideal ${st.h.join('–')}); humidifier ${o(d.humidifier)}, fan ${o(d.fan)}, heater ${o(d.heater)}.`};
+async function ask(q){
+  q=q.trim();if(!q)return;$('#chips').hidden=true;
+  bubble('me',md(q));
+  if(!cfg.key){bubble('bot','I need an API key before I can answer. Open <b>Settings</b> at the top right and paste your key.');return}
+  hist.push({role:'user',content:q});
+  const w=bubble('bot','<span class="dots"><i></i><i></i><i></i></span>');
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:cfg.model,max_tokens:500,system:context(),messages:hist})});
+    const j=await r.json();if(j.error)throw new Error(j.error.message);
+    const t=j.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    w.innerHTML=md(t);hist.push({role:'assistant',content:t});
+  }catch(e){hist.pop();w.innerHTML=md('That didn’t go through: '+e.message+'. Check your API key in Settings.')}
+  log.scrollTop=log.scrollHeight;
+}
+function openChat(on=true,prefill){chat.classList.toggle('open',on);chat.inert=!on;$('#fab').classList.toggle('hide',on);
+  if(on){$('#q').focus();if(prefill)ask(prefill)}else $('#fab').focus()}
+bubble('bot','Hi, I’m Mycel. Ask me anything about your room, from humidity to harvest timing.');
+
+/* ---------- Wiring ---------- */
+$$('.dev').forEach(b=>b.onclick=()=>toggle(b));
+$$('.seg button').forEach(b=>b.onclick=()=>{cfg.stage=b.dataset.s;persist();paint()});
+$('#fab').onclick=()=>openChat();
+$('#closeChat').onclick=()=>openChat(false);
+$('#askBtn').onclick=()=>openChat(true,`My room needs attention. ${issues.join(' ')} What should I do?`);
+$$('#chips button').forEach(b=>b.onclick=()=>ask(b.textContent));
+$('#chatForm').onsubmit=e=>{e.preventDefault();const v=$('#q').value;$('#q').value='';ask(v)};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&chat.classList.contains('open'))openChat(false)});
+$('#setBtn').onclick=()=>{$('#fEsp').value=cfg.esp;$('#fKey').value=cfg.key;$('#fDemo').checked=cfg.demo;$('#dlg').showModal()};
+$('#cancel').onclick=()=>$('#dlg').close();
+$('#setForm').onsubmit=()=>{cfg.esp=$('#fEsp').value.trim().replace(/^https?:\/\//,'').replace(/\/$/,'');cfg.key=$('#fKey').value.trim();cfg.demo=$('#fDemo').checked;persist();poll()};
+
+poll();setInterval(poll,3000);
+</script>
+</body>
+</html>
