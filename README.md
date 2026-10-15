@@ -19,6 +19,15 @@ Ten sections: Overview · Live Monitoring · Cultivation Batches · Growth
 Timeline · AI Predictions · Environmental Control · AI Cultivation Assistant ·
 Analytics and Reports · Device Management · System Settings.
 
+**Plain-language first.** The UI opens in a *Simple* view written for growers:
+the home page starts with a "MYCO AI says" briefing (status in words, what
+needs attention, one next step), readings are marked *Good / Too low / Too
+high*, and MYCO AI can be asked from any page through the **Ask MYCO AI**
+button / slide-over. Device ids, message ids, bucket sizes, rule keys, model
+names and controller decision traces are hidden behind "technical details"
+blocks until you switch to the *Detailed* view (header toggle or System
+Settings; remembered per browser).
+
 ---
 
 ## Quick start (development)
@@ -200,6 +209,14 @@ under *System Settings*.
   conversation history, suggested questions, markdown rendering, batch/device
   context, explicit **AI unavailable** state with a deterministic fallback that
   answers from stored data.
+* Home-page briefing (`GET /api/ai/insight`): status / headline / bullet
+  points / next step are always computed deterministically from stored
+  readings, alerts, history and the stage estimate; when a provider is
+  configured a short narrative is added and labelled *Written by MYCO AI*,
+  otherwise the card says *From your data (AI offline)*. Cached 10 min per
+  device.
+* Assistant drawer on every page with "Ask MYCO AI about this" shortcuts on
+  alerts, recommendations, anomalies, equipment state and batch stage.
 
 ### Platform
 * Users with roles viewer / operator / admin, settings UI with validation,

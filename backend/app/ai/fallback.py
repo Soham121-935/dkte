@@ -9,7 +9,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-FALLBACK_LABEL = "_Deterministic assistant (AI provider unavailable) – answers computed directly from stored data._"
+from .insight import build_briefing
+
+FALLBACK_LABEL = "_Answered directly from your stored data – the AI language model is offline right now (deterministic assistant)._"
 
 
 def _dt(iso: str | None) -> str:
@@ -38,6 +40,11 @@ def answer(question: str, ctx: dict[str, Any]) -> str:
             return "unknown"
         return "inside" if float(lo) <= value <= float(hi) else ("below" if value < float(lo) else "above")
 
+    if re.search(r"\b(how is|how's|hows|everything|all good|okay|ok|status|summary|overview|doing|briefing|look)\b", q) and not re.search(r"\b(temperature|temp|humidity|heater|fan|humidifier|stage)\b", q):
+        briefing = build_briefing(ctx)
+        parts.append(f"**{briefing['headline']}**")
+        parts.extend(f"- {p['text']}" for p in briefing["points"])
+        parts.append(f"**Next step:** {briefing['next_step']}")
     if re.search(r"\b(temperature|temp|warm|cold|hot)\b", q):
         if cr:
             status = in_range(cr["temperature_c"], tg.get("temperature_min_c"), tg.get("temperature_max_c"))
@@ -54,7 +61,7 @@ def answer(question: str, ctx: dict[str, Any]) -> str:
                 parts.append(f"Growing-medium moisture: **{cr['substrate_moisture_raw']}** (raw, uncalibrated ADC units).")
         else:
             parts.append(_reading_header(ctx))
-    if re.search(r"\b(changed|change|last 24|yesterday|today|trend)\b", q) and "problem" not in q:
+    if re.search(r"\b(changed|change|last 24|yesterday|today|trend)\b", q) and not re.search(r"\b(problem|issue|alert|anomal|wrong|error)\b", q):
         h = ctx.get("history", {})
         c = h.get("change_24h")
         if c:
@@ -133,7 +140,9 @@ def answer(question: str, ctx: dict[str, Any]) -> str:
         elif not ctx.get("observations", {}).get("items"):
             parts.append("Missing: no grower observations recorded for the batch.")
     if not parts:
-        parts.append("I can answer questions about current readings, the last 24 hours, actuator reasons, the cultivation stage, alerts, missing data and recommendations.")
+        parts.append("I can tell you how the chamber is doing, the current temperature and humidity, what changed in the last 24 hours, "
+                     "why the heater, fan or humidifier is on, which growth stage the batch is in, open alerts, missing data and what to do next. "
+                     "Try asking: *How is my chamber doing?*")
         if cr:
             parts.append(f"{_reading_header(ctx)}: {cr['temperature_c']} °C, {cr['relative_humidity_percent']} % RH, moisture {cr['substrate_moisture_raw']} raw.")
     parts.append("")

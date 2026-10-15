@@ -142,7 +142,7 @@ describe('AlertsPanel', () => {
     expect(fetchMock.calls.find((c) => c.url.startsWith('/api/alerts?'))?.url).toContain('device_id=myco-sim-01');
 
     // viewer (no token): the action opens the login dialog instead of calling the API
-    await user.click(screen.getByRole('button', { name: /acknowledge/i }));
+    await user.click(screen.getByRole('button', { name: /mark as seen/i }));
     expect(await screen.findByRole('dialog')).toHaveTextContent(/Sign in/);
     expect(ackCalls).toBe(0);
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /cancel/i }));
@@ -159,7 +159,7 @@ describe('AlertsPanel', () => {
     fetchMock.on('GET', /^\/api\/auth\/me$/, () => ({ id: 2, username: 'operator1', role: 'operator' }));
     fetchMock.on('POST', /^\/api\/alerts\/7\/acknowledge$/, ({ headers }) => (headers.authorization === 'Bearer op-token' ? { ...FIXTURES.alerts[3], status: 'acknowledged' } : json(403, { detail: 'forbidden' })));
     renderApp(<AlertsPanel />);
-    const btn = await screen.findByRole('button', { name: /acknowledge/i });
+    const btn = await screen.findByRole('button', { name: /mark as seen/i });
     await waitFor(() => expect(fetchMock.calls.some((c) => c.url === '/api/auth/me')).toBe(true));
     await user.click(btn);
     await waitFor(() => expect(fetchMock.calls.some((c) => c.method === 'POST' && c.url === '/api/alerts/7/acknowledge')).toBe(true));

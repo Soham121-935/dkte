@@ -112,3 +112,23 @@ selector and on every page that displays readings.
 * The event bus is in-process; running several backend workers requires an
   external broker (Redis pub/sub) for WebSocket fan-out – not needed for the
   prototype, so not built.
+
+
+## Plain-language layer (frontend)
+
+* `ViewModeProvider` (`simple` | `detailed`, persisted in `localStorage` under
+  `myco-view-mode`, default `simple`). `Advanced` renders children only in the
+  detailed view; `TechDetails` is a collapsible block that is closed by default
+  in the simple view and always open in the detailed view. Pages use
+  `useViewMode().detailed` to swap copy (e.g. "hysteresis" ↔ "temperature
+  buffer", rule keys, device ids, model names).
+* `AssistantProvider` + `AssistantDrawer`: `ask(question)` opens the slide-over
+  chat (or hands the question to the assistant page when it is open) and sends
+  it in the selected device's context. The chat logic lives in
+  `useAssistantChat` and is shared by the drawer and the full page.
+* Home briefing: `GET /api/ai/insight` (`app/ai/insight.py` builds the
+  deterministic structure from the assistant context; `AIService.insight`
+  optionally adds an LLM narrative and caches per device/batch for 10 min).
+  The structured part never depends on the provider, so the home page is
+  identical in demo mode and with a key configured except for the narrative
+  and its label.

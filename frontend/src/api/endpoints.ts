@@ -1,5 +1,6 @@
 import { api, downloadFile, type Query } from './client';
 import type {
+  AIInsight,
   AIMessage,
   AIStatus,
   Alert,
@@ -141,13 +142,16 @@ export const endpoints = {
   aiStatus: () => api<AIStatus>('/api/ai/status'),
   aiDiagnostics: () => api<Record<string, unknown>>('/api/ai/diagnostics', { method: 'POST' }),
   aiSuggestions: () => api<{ questions: string[] }>('/api/ai/suggestions'),
+  aiInsight: (deviceId: string, batchId?: number | null, refresh = false) =>
+    api<AIInsight>('/api/ai/insight', { query: { device_id: deviceId, batch_id: batchId ?? undefined, refresh: refresh ? 'true' : undefined } }),
   conversations: (limit = 30) => api<Conversation[]>('/api/ai/conversations', { query: { limit } }),
   conversation: (id: number) => api<Conversation & { messages: AIMessage[] }>(`/api/ai/conversations/${id}`),
   createConversation: (body: { device_id?: string | null; batch_id?: number | null; title?: string }) =>
     api<Conversation>('/api/ai/conversations', { method: 'POST', body }),
   deleteConversation: (id: number) => api<void>(`/api/ai/conversations/${id}`, { method: 'DELETE' }),
+  /** Returns the updated conversation summary, the last two messages (user + assistant) and the provider status. */
   sendMessage: (id: number, content: string, signal?: AbortSignal) =>
-    api<Conversation & { messages: AIMessage[] }>(`/api/ai/conversations/${id}/messages`, { method: 'POST', body: { content }, signal }),
+    api<{ conversation: Conversation; messages: AIMessage[]; ai: AIStatus }>(`/api/ai/conversations/${id}/messages`, { method: 'POST', body: { content }, signal }),
 
   // ---- settings / simulator
   settings: () => api<SettingsResponse>('/api/settings'),

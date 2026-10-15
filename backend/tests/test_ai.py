@@ -66,7 +66,7 @@ def test_not_configured_uses_deterministic_fallback_and_says_so(client):
     reply = r.json()["messages"][-1]
     assert reply["role"] == "assistant" and reply["mode"] == "fallback"
     assert reply["error"]  # the UI shows an explicit "AI unavailable" indication
-    assert "Deterministic assistant" in reply["content"]
+    assert "AI language model is offline" in reply["content"] and "deterministic assistant" in reply["content"]
 
 
 def test_llm_reply_with_context_and_usage_accounting(client, admin):
@@ -270,3 +270,105 @@ def test_conversation_management(client, operator, viewer):
     assert client.delete(f"/api/ai/conversations/{cid}", headers=operator).status_code == 204
     assert client.get(f"/api/ai/conversations/{cid}").status_code == 404
     db_conv = AIConversation  # noqa: F841  (model import exercised)
+
+
+# --------------------------------------------------------------------------- insight / briefing
+from app.ai.insight import build_briefing  # noqa: E402
+
+
+def _ctx(**overrides):
+    base = {
+        "generated_at": "2026-10-15T06:00:00+00:00",
+        "device": {"id": "d", "name": "Chamber", "kind": "hardware", "connection_status": "online", "control_mode": "auto"},
+        "current_reading": {"kind": "measurement", "source": "hardware", "measured_at": "2026-10-15T05:59:30+00:00", "age_seconds": 30,
+                            "stale": False, "temperature_c": 22.0, "relative_humidity_percent": 90.0, "substrate_moisture_raw": 2000,
+                            "quality": {}, "fan_state": False, "heater_state": False, "humidifier_state": True},
+        "targets": {"temperature_min_c": 20, "temperature_max_c": 24, "humidity_min_percent": 85, "humidity_max_percent": 95},
+        "history": {"n_readings": 100, "temperature_c": {"min": 21.0, "max": 23.0, "mean": 22.0},
+                    "relative_humidity_percent": {"min": 86, "max": 92, "mean": 89}, "outside_range": {}, "data_completeness": 0.99},
+        "alerts": {"items": []}, "batch": None, "stage_estimate": None, "recommendations": {"items": []},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_briefing_is_good_when_everything_is_in_range():
+    b = build_briefing(_ctx())
+    assert b["status"] == "good" and b["headline"] == "Everything looks good"
+    texts = " ".join(p["text"] for p in b["points"])
+    assert "Temperature is 22 °C – inside the target range (20–24 °C)" in texts
+    assert "No open alerts" in texts
+    assert b["simulated"] is False and "measured by your chamber" in b["data_note"]
+    assert "Nothing to do right now" in b["next_step"]
+
+
+def test_briefing_flags_low_temperature_offline_and_alerts_in_plain_words():
+    ctx = _ctx()
+    ctx["current_reading"].update({"temperature_c": 17.0, "heater_state": True, "source": "simulation"})
+    ctx["alerts"] = {"items": [{"title": "Temperature out of range", "severity": "warning", "status": "active"},
+                               {"title": "Old one", "severity": "critical", "status": "resolved"}]}
+    b = build_briefing(ctx)
+    assert b["status"] == "attention"
+    texts = [p["text"] for p in b["points"]]
+    assert any("well below the target range" in t and "The heater is on." in t for t in texts)
+    assert any(t.startswith("1 open alert: Temperature out of range") for t in texts)
+    assert b["simulated"] is True and "simulated" in b["data_note"]
+    # no jargon leaks into the grower-facing text
+    joined = " ".join(texts).lower()
+    for word in ("hysteresis", "adc", "mqtt", "rule_key", "interlock"):
+        assert word not in joined
+
+    ctx["device"]["connection_status"] = "offline"
+    ctx["current_reading"]["age_seconds"] = 3600
+    b2 = build_briefing(ctx)
+    assert any("appears to be disconnected" in p["text"] for p in b2["points"])
+    assert "connection" in b2["next_step"].lower() or "power" in b2["next_step"].lower()
+
+
+def test_briefing_without_readings_is_unknown_and_uses_stage_estimate_when_available():
+    assert build_briefing(_ctx(current_reading=None))["status"] == "unknown"
+    ctx = _ctx(batch={"code": "B-1", "species": "Pleurotus ostreatus"},
+               stage_estimate={"available": True, "timing": "within_window", "current_stage": {"name": "Pinning", "elapsed_days": 4.6},
+                               "next_stage": {"name": "Fruiting", "observable_signs": ["Caps expanding beyond 1 cm."]}})
+    b = build_briefing(ctx)
+    assert any("day 5 of the Pinning stage" in p["text"] and p["kind"] == "estimate" for p in b["points"])
+    assert b["next_step"].startswith("Inspect the batch for signs of fruiting: caps expanding")
+
+
+def test_insight_endpoint_falls_back_without_provider_and_caches(client, admin):
+    _install(FakeProvider(configured=False))
+    device_id, token = create_hw_device(client, admin)
+    post_telemetry(client, token, device_id, temperature_c=27.5, relative_humidity_percent=88.0)
+    r = client.get("/api/ai/insight", params={"device_id": device_id})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "fallback" and body["narrative"] is None and body["model"] is None
+    assert "AI assistant offline" in body["label"] and body["error"]
+    assert body["status"] in ("watch", "attention")
+    assert any("Temperature is 27.5 °C" in p["text"] and "above the target range" in p["text"] for p in body["points"])
+    assert body["cached"] is False
+    assert client.get("/api/ai/insight", params={"device_id": device_id}).json()["cached"] is True
+    assert client.get("/api/ai/insight", params={"device_id": device_id, "refresh": "true"}).json()["cached"] is False
+    assert client.get("/api/ai/insight", params={"device_id": "nope"}).status_code == 404
+    assert client.get("/api/ai/insight", params={"device_id": device_id, "batch_id": 99999}).status_code == 404
+
+
+def test_insight_uses_llm_narrative_when_configured_and_falls_back_on_error(client, admin):
+    device_id, token = create_hw_device(client, admin, device_id="esp32-insight-02")
+    post_telemetry(client, token, device_id, temperature_c=22.0, relative_humidity_percent=90.0)
+    provider = FakeProvider(reply="Your chamber is doing well: temperature and humidity are inside their targets. Nothing to do right now.")
+    svc = _install(provider)
+    body = client.get("/api/ai/insight", params={"device_id": device_id}).json()
+    assert body["mode"] == "llm" and body["model"] == "fake-model" and body["narrative"].startswith("Your chamber is doing well")
+    assert "Written by MYCO AI" in body["label"]
+    assert body["points"] and body["status"] == "good"
+    sent = provider.calls[-1]
+    assert sent[0]["role"] == "system" and "# CONTEXT" in sent[0]["content"] and "22.0" in sent[0]["content"]
+    assert "plain language" in sent[1]["content"].lower() and "Computed status: Everything looks good" in sent[1]["content"]
+    assert svc.total_completion_tokens == 30 and svc.requests == 1
+
+    svc = _install(FakeProvider(fail_with=AITimeout("slow")))
+    body = client.get("/api/ai/insight", params={"device_id": device_id}).json()
+    assert body["mode"] == "fallback" and body["narrative"] is None
+    assert body["error"] == AITimeout.user_message
+    assert body["points"] and svc.failures == 1

@@ -13,6 +13,8 @@ import { ActuatorChart, MetricChart, gapsFromRows, toChartRows } from '@/compone
 import { AlertsPanel } from '@/components/AlertsPanel';
 import { fmtDateTime, fmtDuration, fmtNumber, fmtTime } from '@/lib/format';
 import { fromLocalInput } from '@/lib/utils';
+import { useViewMode } from '@/providers/ViewModeProvider';
+import { TechDetails } from '@/components/Technical';
 
 const RANGES: { value: RangeKey; label: string }[] = [
   { value: '1h', label: '1 h' },
@@ -55,6 +57,7 @@ export function TimeRangePicker({ ctrl }: { ctrl: ReturnType<typeof useTimeRange
 
 export default function LiveMonitoring() {
   const { device, deviceId } = useDevice();
+  const { detailed } = useViewMode();
   const { latestReadings, connected } = useLive();
   const toast = useToast();
   const ctrl = useTimeRange('6h');
@@ -87,13 +90,13 @@ export default function LiveMonitoring() {
     }
   };
 
-  if (!device) return <EmptyState title="No device selected" description="Register a device or enable the simulator." />;
+  if (!device) return <EmptyState title="No chamber selected" description="Add a chamber controller under Device Management or turn on the demo simulator." />;
 
   return (
     <div className="space-y-4">
       <SectionTitle
         title="Live Monitoring"
-        description="Real-time sensor values with quality flags, time-series history, data gaps and alerts. Every value shows its origin (measured, simulated) and timestamp."
+        description={detailed ? 'Real-time sensor values with quality flags, time-series history, data gaps and alerts. Every value shows its origin (measured, simulated) and timestamp.' : 'The latest readings from your chamber and how they changed over time. Every value shows when it was measured and whether it is real or simulated.'}
         actions={
           <>
             <ConnectionBadge status={device.connection_status} lastSeen={device.last_seen_at} />
@@ -106,23 +109,19 @@ export default function LiveMonitoring() {
       />
       {device.connection_status !== 'online' && (
         <Notice tone={device.connection_status === 'offline' ? 'danger' : 'amber'}>
-          Device is <strong>{device.connection_status === 'offline' ? 'DISCONNECTED' : device.connection_status.toUpperCase()}</strong>. Values below are the most recent stored readings and are not live.
+          The chamber is <strong>{device.connection_status === 'offline' ? 'DISCONNECTED' : device.connection_status.toUpperCase()}</strong>. The values below are the most recent stored readings, not live ones.
         </Notice>
       )}
 
       <ReadingCards reading={reading} targets={targets} loading={latest.isLoading} />
 
-      <Card
-        title="Sensor channels"
-        subtitle={latest.data?.reading ? `message ${latest.data.reading.message_id?.slice(0, 8) ?? '—'} · schema v${latest.data.reading.schema_version} · received ${fmtTime(latest.data.reading.received_at)}` : 'waiting for the first message'}
-        padded={false}
-      >
+      <TechDetails title="All sensor channels" summary={latest.data?.reading ? (detailed ? `message ${latest.data.reading.message_id?.slice(0, 8) ?? '—'} · schema v${latest.data.reading.schema_version} · received ${fmtTime(latest.data.reading.received_at)}` : `last message received ${fmtTime(latest.data.reading.received_at)}`) : 'waiting for the first message'}>
         {latest.isLoading ? (
           <Loading className="px-4" />
         ) : latest.error ? (
           <ErrorState error={latest.error} onRetry={() => latest.refetch()} />
         ) : !latest.data?.sensors.length ? (
-          <EmptyState title="No readings yet" description="The device has not sent any accepted telemetry." className="py-6" />
+          <EmptyState title="No readings yet" description="The chamber has not sent any accepted readings." className="py-6" />
         ) : (
           <div className="overflow-x-auto">
             <table className="table">
@@ -139,7 +138,7 @@ export default function LiveMonitoring() {
               <tbody>
                 {latest.data.sensors.map((s) => (
                   <tr key={s.sensor_type}>
-                    <td className="font-mono text-xs text-ink">{s.sensor_type}</td>
+                    <td className={detailed ? 'font-mono text-xs text-ink' : 'text-xs text-ink'}>{detailed ? s.sensor_type : s.sensor_type.replace(/_/g, ' ')}</td>
                     <td className="font-mono">{typeof s.value === 'boolean' ? (s.value ? 'ON' : 'OFF') : s.value === null ? '—' : fmtNumber(s.value, s.unit === '°C' ? 1 : 0)}</td>
                     <td>{s.unit}</td>
                     <td>{s.quality === 'ok' ? <Badge tone="brand">ok</Badge> : <QualityBadge quality={s.quality} />}</td>
@@ -156,7 +155,7 @@ export default function LiveMonitoring() {
         {latest.data?.reading?.quality?.warnings?.length ? (
           <div className="border-t border-line px-4 py-2 text-[11px] text-amber">Validation warnings: {latest.data.reading.quality.warnings.join('; ')}</div>
         ) : null}
-      </Card>
+      </TechDetails>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs
@@ -164,8 +163,8 @@ export default function LiveMonitoring() {
           onChange={setTab}
           items={[
             { value: 'charts', label: 'Charts' },
-            { value: 'readings', label: 'Raw readings' },
-            { value: 'rejections', label: 'Rejected messages' },
+            { value: 'readings', label: detailed ? 'Raw readings' : 'Readings table' },
+            { value: 'rejections', label: detailed ? 'Rejected messages' : 'Data problems' },
             { value: 'alerts', label: 'Alerts' },
           ]}
         />
@@ -186,30 +185,30 @@ export default function LiveMonitoring() {
           ) : series.error ? (
             <ErrorState error={series.error} onRetry={() => series.refetch()} />
           ) : series.data && !series.data.points.length ? (
-            <EmptyState title="No data in this range" description="Choose a wider range or check that the device is sending telemetry." />
+            <EmptyState title="No data in this range" description="Choose a wider range or check that the chamber is sending readings." />
           ) : series.data ? (
             <>
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-3">
                 <span>{series.data.n_readings} readings</span>
-                <span>· bucket {fmtDuration(series.data.bucket_seconds)}</span>
-                <span>· sources:</span>
+                {detailed && <span>· bucket {fmtDuration(series.data.bucket_seconds)}</span>}
+                {detailed ? <span>· sources:</span> : <span>·</span>}
                 {series.data.sources.map((s) => (
                   <SourceTag key={s} source={s} />
                 ))}
                 {gaps.length > 0 && <Badge tone="danger">{gaps.length} data gap{gaps.length > 1 ? 's' : ''} (shaded)</Badge>}
-                {targets && <span>· target band from {targets.source_label ?? targets.source}</span>}
+                {targets && <span>· {detailed ? 'target band from' : 'target range from'} {targets.source_label ?? targets.source}</span>}
               </div>
               <Card title="Temperature (°C)">
                 <MetricChart rows={rows} metric="temperature_c" targets={targets} gaps={gaps} height={240} />
               </Card>
-              <Card title="Relative humidity (%)" subtitle="DHT11 readings above ~90 % RH are outside the sensor's rated range and should be treated as approximate.">
+              <Card title="Humidity (%)" subtitle={detailed ? "DHT11 readings above ~90 % RH are outside the sensor's rated range and should be treated as approximate." : 'Readings above about 90 % are at the edge of what the sensor can measure – treat them as approximate.'}>
                 <MetricChart rows={rows} metric="relative_humidity_percent" targets={targets} gaps={gaps} height={240} />
               </Card>
               <div className="grid gap-4 lg:grid-cols-2">
-                <Card title="Substrate moisture (raw ADC counts)" subtitle="Uncalibrated – compare trends, not absolute values.">
+                <Card title={detailed ? 'Substrate moisture (raw ADC counts)' : 'Substrate moisture (raw sensor value)'} subtitle="Not calibrated – watch the trend rather than the exact number.">
                   <MetricChart rows={rows} metric="substrate_moisture_raw" targets={targets} gaps={gaps} height={200} />
                 </Card>
-                <Card title="Actuator activity" subtitle="fraction of each bucket the device reported the actuator ON">
+                <Card title="Equipment activity" subtitle={detailed ? 'fraction of each bucket the device reported the actuator ON' : 'how much of the time each piece of equipment was on'}>
                   <ActuatorChart rows={rows} height={200} />
                   <div className="mt-1 flex gap-3 text-[11px] text-ink-3">
                     <span><span className="inline-block h-2 w-2 rounded-sm" style={{ background: '#6ea4ec' }} /> fan</span>
@@ -219,7 +218,7 @@ export default function LiveMonitoring() {
                 </Card>
               </div>
               {gaps.length > 0 && (
-                <Card title="Missing-data intervals" padded={false}>
+                <Card title="Gaps in the data" subtitle="periods when no readings arrived" padded={false}>
                   <table className="table">
                     <thead>
                       <tr>
@@ -246,7 +245,7 @@ export default function LiveMonitoring() {
       )}
 
       {tab === 'readings' && (
-        <Card title="Raw readings (newest first, max 200)" padded={false}>
+        <Card title={detailed ? 'Raw readings (newest first, max 200)' : 'Readings (newest first, up to 200)'} padded={false}>
           {readings.isLoading ? (
             <Loading className="px-4" />
           ) : readings.error ? (
@@ -296,13 +295,13 @@ export default function LiveMonitoring() {
       )}
 
       {tab === 'rejections' && (
-        <Card title="Rejected / quarantined messages" subtitle="Messages that failed schema, timestamp or plausibility validation are not stored as readings; the rejection reason is logged here." padded={false}>
+        <Card title={detailed ? 'Rejected / quarantined messages' : 'Messages that were not accepted'} subtitle={detailed ? 'Messages that failed schema, timestamp or plausibility validation are not stored as readings; the rejection reason is logged here.' : 'Readings that looked wrong (impossible values, bad timestamps, wrong format) are kept out of your data. The reason is listed here.'} padded={false}>
           {rejections.isLoading ? (
             <Loading className="px-4" />
           ) : rejections.error ? (
             <ErrorState error={rejections.error} onRetry={() => rejections.refetch()} />
           ) : !rejections.data?.length ? (
-            <EmptyState title="No rejected messages" description="All recent messages from this device passed validation." className="py-6" />
+            <EmptyState title="No problems" description="All recent messages from this chamber were accepted." className="py-6" />
           ) : (
             <table className="table">
               <thead>
@@ -332,7 +331,7 @@ export default function LiveMonitoring() {
       )}
 
       {tab === 'alerts' && (
-        <Card title="Alerts" subtitle="Deduplicated with cooldown; auto-resolved when the condition clears.">
+        <Card title="Alerts" subtitle={detailed ? 'Deduplicated with cooldown; auto-resolved when the condition clears.' : 'Alerts clear themselves once the problem is gone; mark them as seen so others know you noticed.'}>
           <div id="alerts" />
           <AlertsPanel deviceId={deviceId} />
         </Card>

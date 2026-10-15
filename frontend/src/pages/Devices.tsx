@@ -9,6 +9,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, Field, Input, KeyValue, Lo
 import { ConnectionBadge, DeviceKindIcon, SectionTitle, SourceTag } from '@/components/domain';
 import { fmtAgo, fmtDateTime, fmtDuration, fmtNumber, titleCase } from '@/lib/format';
 import type { Device } from '@/api/types';
+import { useViewMode } from '@/providers/ViewModeProvider';
 
 function SimulatorPanel() {
   const { canOperate, openLogin } = useAuth();
@@ -331,6 +332,7 @@ function DeviceCard({ d, onEdit }: { d: Device; onEdit: () => void }) {
 export default function Devices() {
   const devices = useDevices();
   const { isAdmin, openLogin } = useAuth();
+  const { detailed } = useViewMode();
   const toast = useToast();
   const status = useQuery({ queryKey: qk.status, queryFn: endpoints.systemStatus, refetchInterval: 15000 });
   const [formOpen, setFormOpen] = useState(false);
@@ -340,7 +342,7 @@ export default function Devices() {
     <div className="space-y-4">
       <SectionTitle
         title="Device Management"
-        description="Registered ESP32 nodes and the built-in simulator. Devices authenticate with a per-device token (MQTT payload field or X-Device-Token header); readings are tagged with their origin."
+        description={detailed ? 'Registered ESP32 nodes and the built-in simulator. Devices authenticate with a per-device token (MQTT payload field or X-Device-Token header); readings are tagged with their origin.' : 'Your chamber controllers (ESP32 boards) and the demo simulator. Each controller gets its own access token, and every reading is tagged with where it came from.'}
         actions={
           <Button
             size="sm"

@@ -4,6 +4,7 @@ import { Badge, Card, Skeleton } from '@/components/ui';
 import { QualityBadge, SourceTag } from '@/components/domain';
 import { fmtAgo, fmtDateTime, fmtNumber } from '@/lib/format';
 import { cn, inRange } from '@/lib/utils';
+import { useViewMode } from '@/providers/ViewModeProvider';
 
 interface Props {
   reading: Reading | null | undefined;
@@ -20,6 +21,7 @@ export function readingIsStale(reading: Reading | null | undefined, maxAgeSecond
 
 export function ReadingCards({ reading, targets, loading, stale, compact }: Props) {
   const isStale = stale ?? readingIsStale(reading);
+  const { detailed } = useViewMode();
   const metrics = [
     {
       key: 'temperature_c' as const,
@@ -34,7 +36,7 @@ export function ReadingCards({ reading, targets, loading, stale, compact }: Prop
     },
     {
       key: 'relative_humidity_percent' as const,
-      label: 'Relative humidity',
+      label: 'Humidity',
       icon: Droplets,
       value: reading?.relative_humidity_percent ?? null,
       unit: '%',
@@ -77,7 +79,7 @@ export function ReadingCards({ reading, targets, loading, stale, compact }: Prop
               <Skeleton className="mt-3 h-8 w-32" />
             ) : (
               <div className={cn('mt-2 font-mono text-3xl font-semibold leading-none', tone)}>
-                {invalid ? <span className="text-xl">invalid</span> : fmtNumber(m.value, m.digits)}
+                {invalid ? <span className="text-xl">no value</span> : fmtNumber(m.value, m.digits)}
                 {!invalid && m.value !== null && <span className="ml-1 text-sm font-normal text-ink-3">{m.unit}</span>}
               </div>
             )}
@@ -89,13 +91,13 @@ export function ReadingCards({ reading, targets, loading, stale, compact }: Prop
               ) : (
                 <span>no target configured</span>
               )}
-              {status === 'low' && !isStale && <Badge tone="amber">below target</Badge>}
-              {status === 'high' && !isStale && <Badge tone="amber">above target</Badge>}
-              {status === 'in' && !isStale && <Badge tone="brand">in range</Badge>}
-              {isStale && reading && <Badge tone="danger">stale</Badge>}
+              {status === 'low' && !isStale && <Badge tone="amber">Too low</Badge>}
+              {status === 'high' && !isStale && <Badge tone="amber">Too high</Badge>}
+              {status === 'in' && !isStale && <Badge tone="brand">Good</Badge>}
+              {isStale && reading && <Badge tone="danger" title="No fresh reading – this value may no longer be accurate">Out of date</Badge>}
             </div>
-            <div className="mt-1 text-[10px] text-ink-3" title={reading ? fmtDateTime(reading.measured_at) : undefined}>
-              {reading ? `measured ${fmtAgo(reading.measured_at)} · ${m.sensor}` : 'no reading received yet'}
+            <div className="mt-1 text-[10px] text-ink-3" title={reading ? `${fmtDateTime(reading.measured_at)} · ${m.sensor}` : undefined}>
+              {reading ? `measured ${fmtAgo(reading.measured_at)}${detailed ? ` · ${m.sensor}` : ''}` : 'no reading received yet'}
             </div>
           </Card>
         );

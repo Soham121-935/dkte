@@ -45,6 +45,8 @@ import observations from './fixtures/observations.json';
 import batchReport from './fixtures/batch_report.json';
 import stageEnvironment from './fixtures/stage_environment.json';
 import batchReadings from './fixtures/batch_readings.json';
+import aiInsight from './fixtures/ai_insight.json';
+import conversationReply from './fixtures/conversation_reply.json';
 
 export const FIXTURES = {
   systemStatus,
@@ -79,6 +81,8 @@ export const FIXTURES = {
   batchReport,
   stageEnvironment,
   batchReadings,
+  aiInsight,
+  conversationReply,
 };
 
 export type RouteHandler = (req: { method: string; url: URL; body: unknown; headers: Record<string, string> }) => unknown | Response | Promise<unknown>;
@@ -118,7 +122,9 @@ export function defaultRoutes(): [RegExp, RouteHandler][] {
     [/^\/api\/analytics\/stage-environment$/, () => stageEnvironment],
     [/^\/api\/ai\/status$/, () => aiStatus],
     [/^\/api\/ai\/suggestions$/, () => aiSuggestions],
+    [/^\/api\/ai\/insight$/, () => aiInsight],
     [/^\/api\/ai\/conversations$/, () => conversations],
+    [/^\/api\/ai\/conversations\/\d+$/, ({ url }) => ({ ...conversationReply.conversation, id: Number(url.pathname.split('/').pop()), messages: [] })],
     [/^\/api\/settings$/, () => settings],
     [/^\/api\/simulator\/status$/, () => simulatorStatus],
     [/^\/api\/auth\/me$/, () => json(401, { detail: 'Not authenticated' })],

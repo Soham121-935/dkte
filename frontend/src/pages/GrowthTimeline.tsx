@@ -111,7 +111,7 @@ export default function GrowthTimeline() {
     <div className="space-y-4">
       <SectionTitle
         title="Growth Timeline"
-        description="Stages come from the batch's species profile. Progress is based on confirmed observations; the calendar estimate only indicates whether a transition is typical – it is not a biological measurement."
+        description="Which stage each batch is in and what usually comes next. You confirm stage changes from what you see – the dates shown are typical timings for the species, not measurements."
         actions={
           <Select aria-label="Select batch" value={selectedId ?? ''} onChange={(e) => navigate(`/timeline/${e.target.value}`)} className="h-8 w-auto py-0 text-xs">
             {list.map((b) => (

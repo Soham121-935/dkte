@@ -11,9 +11,11 @@ import { CHART_COLORS, DutyBars, Histogram, PeriodBars } from '@/components/char
 import { TimeRangePicker, useTimeRange } from '@/pages/LiveMonitoring';
 import { fmtDateTime, fmtDays, fmtDuration, fmtNumber, fmtPercent } from '@/lib/format';
 import { downloadText, toCsv } from '@/lib/utils';
+import { useViewMode } from '@/providers/ViewModeProvider';
 
 export default function Analytics() {
   const { device, deviceId } = useDevice();
+  const { detailed } = useViewMode();
   const toast = useToast();
   const ctrl = useTimeRange('7d');
   const [period, setPeriod] = useState<'day' | 'week'>('day');
@@ -75,7 +77,7 @@ export default function Analytics() {
     <div className="space-y-4">
       <SectionTitle
         title="Analytics and Reports"
-        description="Descriptive statistics over stored readings: distributions, time outside target ranges, actuator runtimes, data completeness and stage-by-stage environment. Associations are shown without causal claims."
+        description={detailed ? 'Descriptive statistics over stored readings: distributions, time outside target ranges, actuator runtimes, data completeness and stage-by-stage environment. Associations are shown without causal claims.' : 'A look back over days or weeks: how often conditions were off target, how long the equipment ran, where data was missing and what the environment was like in each growth stage. Export everything as CSV.'}
         actions={
           <>
             <Button size="sm" variant="outline" icon={<Download className="h-3.5 w-3.5" />} onClick={exportReadings} loading={exporting === 'readings'}>

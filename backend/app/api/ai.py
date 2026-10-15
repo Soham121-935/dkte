@@ -15,15 +15,15 @@ from ..services.control import active_batch_for_device
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 SUGGESTED_QUESTIONS = [
+    "How is my chamber doing right now?",
     "What is the current temperature?",
-    "Is the humidity inside the configured range?",
+    "Is the humidity where it should be?",
     "What changed in the last 24 hours?",
-    "Why is the heater currently running?",
-    "What is the current cultivation stage?",
-    "What conditions should I monitor next?",
-    "What environmental problems occurred today?",
-    "What data is missing?",
-    "What should I investigate before the next stage?",
+    "Why is the heater on?",
+    "Which growth stage is my batch in?",
+    "What should I watch for next?",
+    "Did anything go wrong today?",
+    "Is any data missing?",
 ]
 
 
@@ -54,6 +54,34 @@ async def diagnostics(_: CurrentUser = Depends(require_role("admin"))):
 @router.get("/suggestions")
 def suggestions(_=Depends(read_access)):
     return {"questions": SUGGESTED_QUESTIONS}
+
+
+def _resolve_device(db: Session, device_id: str | None) -> Device:
+    if device_id:
+        device = db.get(Device, device_id)
+        if device is None:
+            raise HTTPException(status_code=404, detail="Device not found")
+        return device
+    device = db.execute(select(Device).where(Device.connection_status == "online").order_by(Device.kind.desc())).scalars().first() \
+        or db.execute(select(Device)).scalars().first()
+    if device is None:
+        raise HTTPException(status_code=409, detail="No device registered")
+    return device
+
+
+@router.get("/insight")
+async def insight(device_id: str | None = Query(default=None), batch_id: int | None = Query(default=None),
+                  refresh: bool = Query(default=False), user: CurrentUser | None = Depends(get_optional_user),
+                  db: Session = Depends(get_db), _=Depends(read_access)):
+    """Plain-language chamber briefing (structured part deterministic, narrative from the AI provider when configured)."""
+    device = _resolve_device(db, device_id)
+    if batch_id is not None:
+        batch = db.get(CultivationBatch, batch_id)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="Batch not found")
+    else:
+        batch = active_batch_for_device(db, device.id)
+    return await ai_module.ai_service.insight(db, device, batch, refresh=refresh, user_key=user.username if user else "anonymous")
 
 
 @router.get("/conversations")

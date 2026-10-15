@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { endpoints, type TimeRange } from '@/api/endpoints';
 
 export const qk = {
@@ -26,6 +26,7 @@ export const qk = {
   periodic: (id: string, period: string, tr: TimeRange) => ['analytics', 'periodic', id, period, tr] as const,
   stageEnv: (id: number) => ['analytics', 'stage-env', id] as const,
   aiStatus: ['ai', 'status'] as const,
+  insight: (id: string, batchId?: number | null) => ['ai', 'insight', id, batchId ?? null] as const,
   conversations: ['ai', 'conversations'] as const,
   conversation: (id: number) => ['ai', 'conversations', id] as const,
   settings: ['settings'] as const,
@@ -69,6 +70,22 @@ export function useBatches(query?: Record<string, string | undefined>) {
 
 export function useProfiles() {
   return useQuery({ queryKey: qk.profiles, queryFn: endpoints.profiles, staleTime: 60000 });
+}
+
+export function useAIStatus() {
+  return useQuery({ queryKey: qk.aiStatus, queryFn: endpoints.aiStatus, refetchInterval: 30000 });
+}
+
+/** Plain-language briefing for the home page; the backend caches it for ~10 minutes. */
+export function useInsight(deviceId: string | null, batchId?: number | null) {
+  return useQuery({
+    queryKey: qk.insight(deviceId ?? '', batchId),
+    queryFn: () => endpoints.aiInsight(deviceId!, batchId),
+    enabled: !!deviceId,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    placeholderData: keepPreviousData,
+  });
 }
 
 export function useInvalidate() {

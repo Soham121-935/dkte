@@ -44,7 +44,7 @@ export default function Batches() {
     <div className="space-y-4">
       <SectionTitle
         title="Cultivation Batches"
-        description="Each batch records species, strain, substrate, inoculation date, confirmed stage, targets, observations and images. Stage changes are confirmed by you – the system never advances a stage from the calendar alone."
+        description="The mushrooms you are growing. Each batch keeps its species, substrate, start date, current stage, notes and photos. You confirm stage changes yourself – the app never moves a batch forward just because time has passed."
         actions={
           <Button variant="primary" size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={newBatch}>
             New batch

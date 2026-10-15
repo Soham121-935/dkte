@@ -133,10 +133,20 @@ export function ActuatorChip({ actuator, entry, reported, className }: { actuato
           {entry?.requested !== undefined && entry?.requested !== null && entry.requested !== confirmed && <span className="text-amber"> · requested {entry.requested ? 'ON' : 'OFF'}</span>}
         </div>
       </div>
-      <Badge tone={status === 'confirmed' ? 'brand' : status === 'pending' ? 'amber' : status === 'mismatch' ? 'danger' : 'neutral'}>{status}</Badge>
+      <Badge tone={status === 'confirmed' ? 'brand' : status === 'pending' ? 'amber' : status === 'mismatch' ? 'danger' : 'neutral'} title={ACTUATOR_STATUS_HELP[status] ?? undefined}>
+        {status}
+      </Badge>
     </div>
   );
 }
+
+/** Plain-language meaning of the actuator status words (shown as tooltips). */
+export const ACTUATOR_STATUS_HELP: Record<string, string> = {
+  confirmed: 'The chamber has confirmed this state',
+  pending: 'A command was sent; waiting for the chamber to confirm',
+  mismatch: 'The chamber reports a different state than requested – check the wiring or relay',
+  unknown: 'No report from the chamber yet',
+};
 
 export function DeviceKindIcon({ kind, className }: { kind: string; className?: string }) {
   return kind === 'simulated' ? <Beaker className={cn('h-4 w-4 text-amber', className)} aria-label="Simulated device" /> : <Cpu className={cn('h-4 w-4 text-brand', className)} aria-label="Hardware device" />;

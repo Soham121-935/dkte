@@ -6,15 +6,16 @@ import { qk, useProfiles } from '@/lib/queries';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { useTheme } from '@/providers/ThemeProvider';
+import { ViewModeSwitch } from '@/components/Technical';
 import { Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, Field, Input, KeyValue, Loading, Modal, Notice, Select, Tabs, Toggle, errorMessage } from '@/components/ui';
 import { SectionTitle, SourceTag } from '@/components/domain';
 import { fmtDateTime, titleCase } from '@/lib/format';
 import type { Profile, StageDefinition } from '@/api/types';
 
 const SECTION_META: Record<string, { label: string; description: string }> = {
-  validation: { label: 'Telemetry validation', description: 'Plausibility limits for incoming readings. Values outside min/max are rejected; outside the sensor range they are stored but flagged.' },
-  alerts: { label: 'Alert thresholds', description: 'Cooldown, auto-resolve, grace periods and detection thresholds for the alert engine.' },
-  control_defaults: { label: 'Control defaults', description: 'Hysteresis, switching intervals and heater limits applied to devices without their own override, plus default targets.' },
+  validation: { label: 'Which readings are accepted', description: 'Plausibility limits for incoming readings. Values outside min/max are rejected; values outside what the sensor can measure are stored but flagged as doubtful.' },
+  alerts: { label: 'Alert thresholds', description: 'How long before an alert repeats, when it clears itself, grace periods and the thresholds that trigger each alert.' },
+  control_defaults: { label: 'Control defaults', description: 'Switching buffers, minimum time between switches and heater limits used by chambers without their own settings, plus default target ranges.' },
   display: { label: 'Display', description: 'Time zone and units (informational).' },
 };
 
@@ -535,7 +536,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <SectionTitle title="System Settings" description="Validation rules, alert thresholds, controller defaults, species profiles, AI provider status and user accounts. Changes take effect immediately on the server." />
+      <SectionTitle title="System Settings" description="Alert thresholds, controller defaults, which readings count as plausible, species profiles, the AI connection and user accounts. Changes take effect immediately on the server." />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs
           value={tab}
@@ -550,9 +551,14 @@ export default function SettingsPage() {
             { value: 'runtime', label: 'Runtime' },
           ]}
         />
-        <div className="flex items-center gap-2 text-xs text-ink-3">
-          Theme
-          <Tabs value={theme} onChange={(t) => setTheme(t)} items={[{ value: 'dark' as const, label: 'Dark' }, { value: 'light' as const, label: 'Light' }]} />
+        <div className="flex flex-wrap items-center gap-3 text-xs text-ink-3">
+          <span className="flex items-center gap-2">
+            View <ViewModeSwitch />
+          </span>
+          <span className="flex items-center gap-2">
+            Theme
+            <Tabs value={theme} onChange={(t) => setTheme(t)} items={[{ value: 'dark' as const, label: 'Dark' }, { value: 'light' as const, label: 'Light' }]} />
+          </span>
         </div>
       </div>
 

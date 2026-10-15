@@ -159,6 +159,36 @@ export interface AIStatus {
   key_hint?: string;
 }
 
+export type InsightStatus = 'good' | 'watch' | 'attention' | 'unknown';
+
+export interface InsightPoint {
+  tone: 'good' | 'warn' | 'bad' | 'info';
+  kind: 'measured' | 'history' | 'estimate' | 'alert' | 'data';
+  text: string;
+}
+
+/** Plain-language chamber briefing from GET /api/ai/insight. */
+export interface AIInsight {
+  device_id: string;
+  batch_id: number | null;
+  generated_at: string;
+  status: InsightStatus;
+  headline: string;
+  points: InsightPoint[];
+  next_step: string;
+  data_note: string | null;
+  simulated: boolean;
+  /** `llm` when the narrative was written by the configured model, `fallback` when only the computed briefing is available. */
+  mode: 'llm' | 'fallback';
+  label: string;
+  narrative: string | null;
+  model: string | null;
+  error: string | null;
+  cached: boolean;
+  cache_age_seconds: number;
+  cache_ttl_seconds: number;
+}
+
 export interface SystemStatus {
   app: string;
   version: string;

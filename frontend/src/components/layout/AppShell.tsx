@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Activity, BarChart3, Bell, Bot, Brain, Cpu, GitBranch, LayoutDashboard, LogIn, LogOut, Menu, Moon, Package, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react';
+import { Activity, BarChart3, Bell, Bot, Brain, Cpu, GitBranch, LayoutDashboard, LogIn, LogOut, Menu, Moon, Package, Settings, SlidersHorizontal, Sparkles, Sun, Wifi, WifiOff, X, type LucideIcon } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -13,26 +13,36 @@ import { ConnectionBadge, DeviceKindIcon, ModeBadge } from '@/components/domain'
 import { fmtAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/providers/ToastProvider';
+import { ViewModeProvider, useViewMode } from '@/providers/ViewModeProvider';
+import { AssistantProvider, useAssistant } from '@/providers/AssistantProvider';
+import { AssistantDrawer } from '@/components/assistant/AssistantDrawer';
+import { ViewModeSwitch } from '@/components/Technical';
 
 export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
   end?: boolean;
+  /** One-line plain-language description shown as a tooltip. */
+  hint: string;
+  group: 'Every day' | 'Your grow' | 'Insights' | 'Setup';
 }
 
+/** The ten required sections, grouped by how often a grower needs them. */
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/monitoring', label: 'Live Monitoring', icon: Activity },
-  { to: '/batches', label: 'Cultivation Batches', icon: Package },
-  { to: '/timeline', label: 'Growth Timeline', icon: GitBranch },
-  { to: '/predictions', label: 'AI Predictions', icon: Brain },
-  { to: '/control', label: 'Environmental Control', icon: SlidersHorizontal },
-  { to: '/assistant', label: 'AI Cultivation Assistant', icon: Bot },
-  { to: '/analytics', label: 'Analytics and Reports', icon: BarChart3 },
-  { to: '/devices', label: 'Device Management', icon: Cpu },
-  { to: '/settings', label: 'System Settings', icon: Settings },
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true, hint: 'How your chamber is doing right now, in plain words', group: 'Every day' },
+  { to: '/assistant', label: 'AI Cultivation Assistant', icon: Bot, hint: 'Ask MYCO AI anything about your grow', group: 'Every day' },
+  { to: '/monitoring', label: 'Live Monitoring', icon: Activity, hint: 'Current readings and charts over time', group: 'Every day' },
+  { to: '/control', label: 'Environmental Control', icon: SlidersHorizontal, hint: 'Fan, heater and humidifier – automatic or manual', group: 'Every day' },
+  { to: '/batches', label: 'Cultivation Batches', icon: Package, hint: 'The mushrooms you are growing: species, stage, notes and photos', group: 'Your grow' },
+  { to: '/timeline', label: 'Growth Timeline', icon: GitBranch, hint: 'Which stage each batch is in and what comes next', group: 'Your grow' },
+  { to: '/predictions', label: 'AI Predictions', icon: Brain, hint: 'What to expect next and anything unusual we noticed', group: 'Insights' },
+  { to: '/analytics', label: 'Analytics and Reports', icon: BarChart3, hint: 'Summaries over days and weeks, with CSV export', group: 'Insights' },
+  { to: '/devices', label: 'Device Management', icon: Cpu, hint: 'Your chamber controller(s) and the demo simulator', group: 'Setup' },
+  { to: '/settings', label: 'System Settings', icon: Settings, hint: 'Thresholds, species profiles, accounts and the AI connection', group: 'Setup' },
 ];
+
+const NAV_GROUPS: NavItem['group'][] = ['Every day', 'Your grow', 'Insights', 'Setup'];
 
 function Logo() {
   return (
@@ -51,26 +61,40 @@ function Logo() {
 }
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { detailed } = useViewMode();
   return (
     <nav aria-label="Main navigation" className="flex h-full flex-col">
       <Logo />
-      <ul className="flex-1 space-y-0.5 px-2 py-1">
-        {NAV_ITEMS.map((item) => (
-          <li key={item.to}>
-            <NavLink to={item.to} end={item.end} onClick={onNavigate} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors', isActive ? 'bg-brand/12 bg-surface-3 font-medium text-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink')}>
-              {({ isActive }) => (
-                <>
-                  <item.icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-ink-3')} aria-hidden />
-                  <span className="truncate">{item.label}</span>
-                </>
-              )}
-            </NavLink>
-          </li>
+      <div className="flex-1 overflow-y-auto px-2 py-1">
+        {NAV_GROUPS.map((group) => (
+          <div key={group} className="mb-2">
+            <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-ink-3">{group}</p>
+            <ul className="space-y-0.5">
+              {NAV_ITEMS.filter((i) => i.group === group).map((item) => (
+                <li key={item.to}>
+                  <NavLink to={item.to} end={item.end} onClick={onNavigate} title={item.hint} className={({ isActive }) => cn('flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors', isActive ? 'bg-brand/12 bg-surface-3 font-medium text-ink' : 'text-ink-2 hover:bg-surface-2 hover:text-ink')}>
+                    {({ isActive }) => (
+                      <>
+                        <item.icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : item.to === '/assistant' ? 'text-brand/80' : 'text-ink-3')} aria-hidden />
+                        <span className="truncate">{item.label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
       <div className="border-t border-line px-4 py-3 text-[11px] text-ink-3">
-        <p>ESP32 · DHT11 · soil-moisture ADC</p>
-        <p>fan · heater relay · humidifier</p>
+        {detailed ? (
+          <>
+            <p>ESP32 · DHT11 · soil-moisture ADC</p>
+            <p>fan · heater relay · humidifier</p>
+          </>
+        ) : (
+          <p>Chamber controller with temperature, humidity and moisture sensors; fan, heater and humidifier.</p>
+        )}
       </div>
     </nav>
   );
@@ -78,7 +102,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 function DeviceSelector() {
   const { devices, deviceId, setDeviceId } = useDevice();
-  if (!devices.length) return <span className="text-xs text-ink-3">No devices registered</span>;
+  const { detailed } = useViewMode();
+  if (!devices.length) return <span className="text-xs text-ink-3">No chamber registered yet</span>;
   const current = devices.find((d) => d.id === deviceId);
   return (
     <div className="flex items-center gap-2">
@@ -86,10 +111,10 @@ function DeviceSelector() {
       <label className="sr-only" htmlFor="device-select">
         Select device
       </label>
-      <Select id="device-select" value={deviceId ?? ''} onChange={(e) => setDeviceId(e.target.value)} className="h-8 w-auto max-w-[200px] py-0 text-xs">
+      <Select id="device-select" value={deviceId ?? ''} onChange={(e) => setDeviceId(e.target.value)} className="h-8 w-auto max-w-[220px] py-0 text-xs" title="Which chamber to show">
         {devices.map((d) => (
           <option key={d.id} value={d.id}>
-            {d.name} ({d.id})
+            {detailed ? `${d.name} (${d.id})` : d.kind === 'simulator' ? `${d.name} – simulated` : d.name}
           </option>
         ))}
       </Select>
@@ -100,6 +125,7 @@ function DeviceSelector() {
 
 function AlertsMenu() {
   const [open, setOpen] = useState(false);
+  const { detailed } = useViewMode();
   const ref = useRef<HTMLDivElement>(null);
   const { data: alerts } = useAlerts({ status: 'open', limit: 20 });
   const qc = useQueryClient();
@@ -144,12 +170,13 @@ function AlertsMenu() {
                     <p className="truncate text-xs font-medium text-ink">{a.title}</p>
                     <p className="line-clamp-2 text-[11px] text-ink-3">{a.message}</p>
                     <p className="mt-0.5 text-[10px] text-ink-3">
-                      {a.device_id ?? 'system'} · {fmtAgo(a.last_seen_at)} · {a.status}
+                      {detailed ? `${a.device_id ?? 'system'} · ` : ''}
+                      {fmtAgo(a.last_seen_at)} · {a.status === 'active' ? 'new' : a.status === 'acknowledged' ? 'seen' : a.status}
                     </p>
                   </div>
                   {a.status === 'active' && canOperate && (
-                    <Button size="xs" variant="ghost" onClick={() => ack.mutate(a.id)}>
-                      Ack
+                    <Button size="xs" variant="ghost" onClick={() => ack.mutate(a.id)} title="Mark as seen">
+                      Seen
                     </Button>
                   )}
                 </div>
@@ -220,7 +247,30 @@ function LiveIndicator() {
 }
 
 export function AppShell({ children }: { children?: ReactNode }) {
+  return (
+    <ViewModeProvider>
+      <AssistantProvider>
+        <ShellLayout>{children}</ShellLayout>
+        <AssistantDrawer />
+      </AssistantProvider>
+    </ViewModeProvider>
+  );
+}
+
+function AskAIButton({ className, compact }: { className?: string; compact?: boolean }) {
+  const { openAssistant } = useAssistant();
+  const location = useLocation();
+  const onAssistant = location.pathname.startsWith('/assistant');
+  return (
+    <Button size="sm" variant="primary" icon={<Sparkles className="h-3.5 w-3.5" />} onClick={openAssistant} className={className} aria-label="Ask MYCO AI" disabled={onAssistant} title={onAssistant ? 'You are on the assistant page' : 'Open MYCO AI on top of this page'}>
+      {compact ? null : <span>Ask MYCO AI</span>}
+    </Button>
+  );
+}
+
+function ShellLayout({ children }: { children?: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
+  const { openAssistant } = useAssistant();
   const location = useLocation();
   const { theme, toggle } = useTheme();
   const { user, openLogin, logout } = useAuth();
@@ -261,6 +311,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
             <DeviceSelector />
           </div>
           <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
+            <AskAIButton className="hidden sm:inline-flex" />
+            <ViewModeSwitch className="hidden md:inline-flex" />
             {mode && (
               <span title={mode.detail}>
                 <ModeBadge mode={mode.mode} label={mode.label} />
@@ -310,6 +362,11 @@ export function AppShell({ children }: { children?: ReactNode }) {
         </main>
       </div>
       <LoginDialog />
+      {!location.pathname.startsWith('/assistant') && (
+        <button type="button" onClick={openAssistant} aria-label="Open MYCO AI" className="fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-canvas shadow-pop hover:brightness-110 sm:hidden">
+          <Sparkles className="h-5 w-5" />
+        </button>
+      )}
       {/* live alert notifications */}
       <div aria-live="assertive" className="pointer-events-none fixed left-1/2 top-16 z-[90] flex w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2">
         {recentAlerts.map((a) => (

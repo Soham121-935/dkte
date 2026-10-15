@@ -87,10 +87,10 @@ describe('ReadingCards', () => {
   it('flags out-of-range values against targets', () => {
     render(<ReadingCards reading={reading} targets={targets} />);
     expect(screen.getByText('26.4')).toBeInTheDocument();
-    expect(screen.getByText('above target')).toBeInTheDocument();
-    expect(screen.getAllByText('in range')).toHaveLength(2); // humidity (85–95) and moisture (no bounds)
+    expect(screen.getByText('Too high')).toBeInTheDocument();
+    expect(screen.getAllByText('Good')).toHaveLength(2); // humidity (85–95) and moisture (no bounds)
     expect(screen.getByText('no target configured')).toBeInTheDocument();
-    expect(screen.queryByText('stale')).not.toBeInTheDocument();
+    expect(screen.queryByText('Out of date')).not.toBeInTheDocument();
   });
 
   it('marks stale readings and invalid sensor values', () => {
@@ -98,10 +98,10 @@ describe('ReadingCards', () => {
     expect(readingIsStale(old)).toBe(true);
     expect(readingIsStale(reading)).toBe(false);
     render(<ReadingCards reading={old} targets={targets} />);
-    expect(screen.getAllByText('stale').length).toBeGreaterThan(0);
-    expect(screen.getByText('invalid')).toBeInTheDocument();
+    expect(screen.getAllByText('Out of date').length).toBeGreaterThan(0);
+    expect(screen.getByText('no value')).toBeInTheDocument();
     expect(screen.getByText('sensor error')).toBeInTheDocument();
-    expect(screen.queryByText('above target')).not.toBeInTheDocument(); // no range verdict for stale data
+    expect(screen.queryByText('Too high')).not.toBeInTheDocument(); // no range verdict for stale data
   });
 
   it('shows an empty state with no reading', () => {

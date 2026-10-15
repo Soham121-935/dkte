@@ -20,10 +20,12 @@ const REQUIRED_SECTIONS = [
 ];
 
 describe('navigation', () => {
-  it('exposes exactly the ten required sections with unique routes', () => {
-    expect(NAV_ITEMS.map((n) => n.label)).toEqual(REQUIRED_SECTIONS);
+  it('exposes exactly the ten required sections with unique routes, grouped with the AI assistant up front', () => {
+    expect([...NAV_ITEMS.map((n) => n.label)].sort()).toEqual([...REQUIRED_SECTIONS].sort());
     expect(new Set(NAV_ITEMS.map((n) => n.to)).size).toBe(10);
-    expect(NAV_ITEMS[0]).toMatchObject({ to: '/', end: true });
+    expect(NAV_ITEMS[0]).toMatchObject({ to: '/', end: true, group: 'Every day' });
+    expect(NAV_ITEMS[1]).toMatchObject({ to: '/assistant', label: 'AI Cultivation Assistant' });
+    for (const item of NAV_ITEMS) expect(item.hint.length).toBeGreaterThan(10);
   });
 });
 
@@ -80,7 +82,7 @@ describe('AppShell with recorded backend data', () => {
     renderApp(<App />, { route: '/monitoring' });
     expect(await screen.findByText(/BACKEND UNREACHABLE/)).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent(/DISCONNECTED/);
-    expect(screen.getAllByText('No devices registered').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('No chamber registered yet').length).toBeGreaterThan(0);
   });
 
   it('opens the login dialog, shows backend errors and signs in with a bearer token', async () => {

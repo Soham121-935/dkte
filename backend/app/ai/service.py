@@ -15,6 +15,7 @@ from ..config import get_settings
 from ..db.models import AIConversation, AIMessage, CultivationBatch, Device
 from . import fallback
 from .context import build_context, render_context_markdown
+from .insight import NARRATIVE_INSTRUCTIONS, build_briefing
 from .provider import AIAuthError, AIError, AINotConfigured, AIProvider, OpenAICompatibleProvider, build_provider
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class AIService:
         self.failures = 0
         self._consecutive_failures = 0
         self._circuit_open_until: float = 0.0
+        self._insight_cache: dict[tuple[str, int | None], tuple[float, dict[str, Any]]] = {}
 
     # ----------------------------------------------------------------- status
     def status(self) -> dict[str, Any]:
@@ -123,6 +125,80 @@ class AIService:
                 steps.append({"step": "json_mode", "ok": False, "detail": exc.user_message})
         result["steps"] = steps
         result["ok"] = all(s["ok"] for s in steps)
+        return result
+
+    # --------------------------------------------------------------- insight
+    INSIGHT_TTL_SECONDS = 600
+
+    def _provider_available(self) -> bool:
+        return self.provider.configured and time.monotonic() >= self._circuit_open_until
+
+    async def insight(self, db: Session, device: Device, batch: CultivationBatch | None, *, refresh: bool = False,
+                      user_key: str = "anonymous") -> dict[str, Any]:
+        """Plain-language chamber briefing for the home page.
+
+        The structured part (status, headline, points, next step) is always
+        computed deterministically from stored data.  When the provider is
+        configured a short narrative is requested from the model and labelled
+        as AI-written; otherwise the briefing is labelled as computed.
+        Results are cached per device/batch for ``INSIGHT_TTL_SECONDS``.
+        """
+        key = (device.id, batch.id if batch else None)
+        cached = self._insight_cache.get(key)
+        if cached and not refresh and time.monotonic() - cached[0] < self.INSIGHT_TTL_SECONDS:
+            return {**cached[1], "cached": True, "cache_age_seconds": int(time.monotonic() - cached[0])}
+
+        ctx = build_context(db, device, batch)
+        briefing = build_briefing(ctx)
+        result: dict[str, Any] = {
+            "device_id": device.id,
+            "batch_id": batch.id if batch else None,
+            "generated_at": ctx["generated_at"],
+            **briefing,
+            "mode": "fallback",
+            "label": "Computed from your stored data (AI assistant offline)",
+            "narrative": None,
+            "model": None,
+            "error": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "cache_ttl_seconds": self.INSIGHT_TTL_SECONDS,
+        }
+        if not self.provider.configured:
+            result["error"] = AINotConfigured.user_message
+        elif time.monotonic() < self._circuit_open_until:
+            result["error"] = f"AI provider unreachable ({self.last_error}); showing the computed briefing."
+        elif not self.limiter.allow(f"insight:{user_key}"):
+            result["error"] = "Local rate limit reached for the AI provider; showing the computed briefing."
+        else:
+            self.requests += 1
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT + "\n\n# CONTEXT (generated " + ctx["generated_at"] + ")\n" + render_context_markdown(ctx)},
+                {"role": "user", "content": NARRATIVE_INSTRUCTIONS + "\n\nComputed status: " + briefing["headline"] + ". Key points:\n- "
+                 + "\n- ".join(p["text"] for p in briefing["points"]) + "\nSuggested next step: " + briefing["next_step"]},
+            ]
+            try:
+                resp = await self.provider.chat(messages, max_tokens=220, temperature=0.3)
+                self.last_success_at = datetime.now(timezone.utc)
+                self.last_error = None
+                self._consecutive_failures = 0
+                self.total_prompt_tokens += resp.prompt_tokens or 0
+                self.total_completion_tokens += resp.completion_tokens or 0
+                narrative = resp.content.strip()
+                if narrative:
+                    if briefing["simulated"] and "simulat" not in narrative.lower():
+                        narrative += " (These readings are simulated.)"
+                    result.update({"mode": "llm", "narrative": narrative, "model": resp.model,
+                                   "label": "Written by MYCO AI from your stored data"})
+            except AIError as exc:
+                self.failures += 1
+                self._consecutive_failures += 1
+                self.last_error = exc.user_message
+                if self._consecutive_failures >= 2 or isinstance(exc, (AIAuthError, AINotConfigured)):
+                    self._circuit_open_until = time.monotonic() + (300.0 if isinstance(exc, AIAuthError) else 60.0)
+                log.warning("AI insight provider error: %s (%s)", exc.user_message, type(exc).__name__)
+                result["error"] = exc.user_message
+        self._insight_cache[key] = (time.monotonic(), result)
         return result
 
     # ------------------------------------------------------------------ chat
