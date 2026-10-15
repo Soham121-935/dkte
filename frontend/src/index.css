@@ -175,7 +175,9 @@
   }
   .cap :focus-visible,
   .stem :focus-visible {
-    @apply ring-cap-ink ring-offset-transparent;
+    /* focus ring in the card's own ink colour (plain CSS so it never depends on config reloads) */
+    --tw-ring-color: rgb(var(--c-cap-ink));
+    --tw-ring-offset-color: transparent;
   }
   .gills {
     height: 70px;
