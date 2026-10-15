@@ -19,6 +19,11 @@
   --c-amber: 184 112 20;
   --c-danger: 190 48 48;
   --c-info: 38 96 170;
+  /* 'spore' accent used for the Ask MYCO AI button and the chat */
+  --c-spore: 236 168 188;
+  --c-spore-ink: 42 18 25;
+  /* ink used on the light cap / stem cards of the home page */
+  --c-cap-ink: 18 32 28;
 }
 
 .dark {
@@ -38,6 +43,9 @@
   --c-amber: 232 170 64;
   --c-danger: 236 98 98;
   --c-info: 110 164 236;
+  --c-spore: 242 184 200;
+  --c-spore-ink: 42 18 25;
+  --c-cap-ink: 18 32 28;
 }
 
 @layer base {
@@ -127,6 +135,98 @@
   }
   .prose-chat hr {
     @apply my-3 border-line;
+  }
+
+  /* ---- Home page: the chamber drawn as a mushroom (cap → gills → stem) ---- */
+  .cap {
+    color: rgb(var(--c-cap-ink));
+    background: linear-gradient(180deg, #d3dfe8 0%, #9cb6c8 100%);
+    border-radius: 50% 50% 28px 28px / 150px 150px 28px 28px;
+  }
+  @media (max-width: 560px) {
+    .cap {
+      border-radius: 50% 50% 24px 24px / 100px 100px 24px 24px;
+    }
+  }
+  .cap-muted {
+    color: rgb(var(--c-cap-ink) / 0.72);
+  }
+  .cap-track {
+    background: rgb(var(--c-cap-ink) / 0.16);
+  }
+  .cap-band {
+    background: rgb(var(--c-cap-ink) / 0.34);
+    transition: left 0.3s, width 0.3s;
+  }
+  .cap-pin {
+    background: rgb(var(--c-cap-ink));
+    border: 3px solid #d3dfe8;
+    transition: left 0.8s ease, background 0.3s;
+  }
+  .cap-pin.bad {
+    background: #b3461f;
+  }
+  .cap-seg {
+    background: rgb(var(--c-cap-ink) / 0.14);
+  }
+  .cap-seg button[aria-pressed='true'] {
+    background: rgb(var(--c-cap-ink));
+    color: #d3dfe8;
+  }
+  .cap :focus-visible,
+  .stem :focus-visible {
+    @apply ring-cap-ink ring-offset-transparent;
+  }
+  .gills {
+    height: 70px;
+    margin: 0 2%;
+    background: repeating-conic-gradient(from 0deg at 50% -90px, rgb(156 182 200 / 0.6) 0 0.45deg, transparent 0.45deg 1.6deg);
+    -webkit-mask: linear-gradient(#000 25%, transparent);
+    mask: linear-gradient(#000 25%, transparent);
+    clip-path: ellipse(50% 100% at 50% 0);
+  }
+  .stem {
+    color: rgb(var(--c-cap-ink));
+    background: #e6ebe2;
+    border-radius: 0 0 56px 56px / 0 0 40px 40px;
+  }
+  .stem-row + .stem-row {
+    border-top: 1px solid rgb(var(--c-cap-ink) / 0.14);
+  }
+  .stem-icon {
+    background: rgb(var(--c-cap-ink) / 0.08);
+    transition: background 0.25s, color 0.25s;
+  }
+  .stem-row.on .stem-icon {
+    background: var(--c);
+    color: #fff;
+  }
+  .stem-switch {
+    background: rgb(var(--c-cap-ink) / 0.26);
+    transition: background 0.25s;
+  }
+  .stem-switch i {
+    transition: transform 0.25s;
+  }
+  .stem-row.on .stem-switch {
+    background: var(--c);
+  }
+  .stem-row.on .stem-switch i {
+    transform: translateX(24px);
+  }
+  .stem-seg {
+    background: rgb(var(--c-cap-ink) / 0.1);
+  }
+  .stem-seg button[aria-pressed='true'] {
+    background: rgb(var(--c-cap-ink));
+    color: #e6ebe2;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cap-pin,
+    .cap-band,
+    .stem-switch i {
+      transition: none;
+    }
   }
 }
 

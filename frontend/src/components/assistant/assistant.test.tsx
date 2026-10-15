@@ -93,7 +93,7 @@ describe('MYCO AI front and centre', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /MYCO AI assistant/i })).not.toBeInTheDocument());
   });
 
-  it('the header button opens the assistant on any page and suggestion chips send a question', async () => {
+  it('the floating bubble opens the assistant on any page and suggestion chips send a question', async () => {
     const user = userEvent.setup();
     const sent = installChatRoutes(fetchMock);
     renderApp(<App />, { route: '/monitoring' });
@@ -130,7 +130,7 @@ describe('MYCO AI front and centre', () => {
     await user.click(screen.getByRole('radio', { name: 'detailed' }));
     await waitFor(() => expect(select.options[0].text).toContain('(myco-sim-01)'));
     expect(screen.getByText('Server time')).toBeInTheDocument();
-    expect(screen.getByText(/bucket \d+s/)).toBeInTheDocument();
+    expect(screen.getByText('Device id')).toBeInTheDocument();
     expect(localStorage.getItem(VIEW_MODE_KEY)).toBe('detailed');
     await user.click(screen.getByRole('radio', { name: 'simple' }));
     await waitFor(() => expect(screen.queryByText('Server time')).not.toBeInTheDocument());
@@ -142,8 +142,8 @@ describe('MYCO AI front and centre', () => {
     const sent = installChatRoutes(fetchMock);
     renderApp(<App />, { route: '/assistant' });
     await screen.findByRole('heading', { level: 1, name: 'AI Cultivation Assistant' });
-    // header button is disabled here – the page itself is the assistant
-    expect(screen.getByRole('button', { name: 'Ask MYCO AI' })).toBeDisabled();
+    // the floating bubble is not shown here – the page itself is the assistant
+    expect(screen.queryByRole('button', { name: 'Ask MYCO AI' })).not.toBeInTheDocument();
     // existing conversations are listed with the chamber name instead of the device id
     expect(await screen.findByText(FIXTURES.conversations[0].title)).toBeInTheDocument();
     const tech = screen.getByRole('button', { name: /AI connection/ });

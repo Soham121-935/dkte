@@ -257,20 +257,30 @@ export function AppShell({ children }: { children?: ReactNode }) {
   );
 }
 
-function AskAIButton({ className, compact }: { className?: string; compact?: boolean }) {
-  const { openAssistant } = useAssistant();
+/** The floating "Ask MYCO AI" bubble – visible on every page except the chat page itself and while the chat window is open. */
+function AskBubble() {
+  const { openAssistant, open } = useAssistant();
   const location = useLocation();
-  const onAssistant = location.pathname.startsWith('/assistant');
+  if (location.pathname.startsWith('/assistant')) return null;
   return (
-    <Button size="sm" variant="primary" icon={<Sparkles className="h-3.5 w-3.5" />} onClick={openAssistant} className={className} aria-label="Ask MYCO AI" disabled={onAssistant} title={onAssistant ? 'You are on the assistant page' : 'Open MYCO AI on top of this page'}>
-      {compact ? null : <span>Ask MYCO AI</span>}
-    </Button>
+    <button
+      type="button"
+      onClick={openAssistant}
+      aria-label="Ask MYCO AI"
+      className={cn(
+        'fixed z-40 flex h-[60px] items-center gap-2.5 rounded-full bg-spore pl-[18px] pr-6 text-base font-bold text-spore-ink shadow-pop transition-all hover:brightness-105 motion-safe:animate-glow',
+        open && 'pointer-events-none scale-75 opacity-0',
+      )}
+      style={{ right: 'max(1rem, env(safe-area-inset-right, 0px))', bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+    >
+      <Sparkles className="h-[22px] w-[22px]" aria-hidden />
+      Ask MYCO AI
+    </button>
   );
 }
 
 function ShellLayout({ children }: { children?: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
-  const { openAssistant } = useAssistant();
   const location = useLocation();
   const { theme, toggle } = useTheme();
   const { user, openLogin, logout } = useAuth();
@@ -311,7 +321,6 @@ function ShellLayout({ children }: { children?: ReactNode }) {
             <DeviceSelector />
           </div>
           <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
-            <AskAIButton className="hidden sm:inline-flex" />
             <ViewModeSwitch className="hidden md:inline-flex" />
             {mode && (
               <span title={mode.detail}>
@@ -362,13 +371,9 @@ function ShellLayout({ children }: { children?: ReactNode }) {
         </main>
       </div>
       <LoginDialog />
-      {!location.pathname.startsWith('/assistant') && (
-        <button type="button" onClick={openAssistant} aria-label="Open MYCO AI" className="fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-canvas shadow-pop hover:brightness-110 sm:hidden">
-          <Sparkles className="h-5 w-5" />
-        </button>
-      )}
+      <AskBubble />
       {/* live alert notifications */}
-      <div aria-live="assertive" className="pointer-events-none fixed left-1/2 top-16 z-[90] flex w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2">
+      <div aria-live="assertive" className="pointer-events-none fixed left-1/2 top-[4.25rem] z-[90] flex w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2">
         {recentAlerts.map((a) => (
           <div key={a.id} className={cn('pointer-events-auto flex items-start gap-2 rounded-md border bg-surface px-3 py-2 shadow-pop animate-fade-in', a.severity === 'critical' ? 'border-danger/60' : 'border-amber/50')}>
             <Bell className={cn('mt-0.5 h-4 w-4 shrink-0', a.severity === 'critical' ? 'text-danger' : 'text-amber')} />

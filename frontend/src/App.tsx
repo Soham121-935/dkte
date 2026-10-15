@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { Loading } from './components/ui';
 
-const Overview = lazy(() => import('./pages/Overview'));
+const Home = lazy(() => import('./pages/Home'));
 const LiveMonitoring = lazy(() => import('./pages/LiveMonitoring'));
 const Batches = lazy(() => import('./pages/Batches'));
 const BatchDetail = lazy(() => import('./pages/BatchDetail'));
@@ -20,7 +20,7 @@ export default function App() {
     <AppShell>
       <Suspense fallback={<Loading label="Loading page…" />}>
         <Routes>
-          <Route path="/" element={<Overview />} />
+          <Route path="/" element={<Home />} />
           <Route path="/monitoring" element={<LiveMonitoring />} />
           <Route path="/batches" element={<Batches />} />
           <Route path="/batches/:id" element={<BatchDetail />} />

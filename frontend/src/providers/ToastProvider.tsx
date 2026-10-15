@@ -52,11 +52,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
+      <div aria-live="polite" className="pointer-events-none fixed left-1/2 top-[4.25rem] z-[100] flex w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-2">
         {toasts.map((t) => {
           const Icon = icons[t.kind];
           return (
-            <div key={t.id} role="status" className={cn('pointer-events-auto flex items-start gap-3 rounded-md border bg-surface px-3 py-2.5 shadow-pop animate-fade-in', colors[t.kind])}>
+            <div key={t.id} role="status" className={cn('pointer-events-auto flex items-start gap-3 rounded-2xl border bg-surface px-3.5 py-2.5 shadow-pop animate-fade-in', colors[t.kind])}>
               <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">{t.title}</p>

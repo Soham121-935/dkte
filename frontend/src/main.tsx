@@ -9,6 +9,8 @@ import { LiveProvider } from './providers/LiveProvider';
 import { DeviceProvider } from './providers/DeviceProvider';
 import { ToastProvider } from './providers/ToastProvider';
 import { ApiError } from './api/client';
+import '@fontsource-variable/figtree';
+import '@fontsource/young-serif';
 import './index.css';
 
 const queryClient = new QueryClient({

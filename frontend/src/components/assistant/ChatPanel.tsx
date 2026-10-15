@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, Send, Sparkles, Square, User as UserIcon } from 'lucide-react';
+import { Send, Sparkles, Square, User as UserIcon } from 'lucide-react';
 import { Badge, Button, ErrorState, Loading, Textarea } from '@/components/ui';
 import { useViewMode } from '@/providers/ViewModeProvider';
 import { fmtAgo, fmtDateTime } from '@/lib/format';
@@ -45,19 +45,21 @@ export function MessageBubble({ m, compact }: { m: AIMessage; compact?: boolean 
   const isUser = m.role === 'user';
   return (
     <div className={cn('flex gap-2.5', isUser ? 'flex-row-reverse' : '')}>
-      <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full border', isUser ? 'border-line-strong bg-surface-2 text-ink-2' : 'border-brand/40 bg-brand/10 text-brand')} aria-hidden>
-        {isUser ? <UserIcon className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-      </div>
-      <div className={cn('min-w-0 rounded-lg border px-3 py-2', compact ? 'max-w-[92%]' : 'max-w-[88%]', isUser ? 'border-line bg-surface-2' : 'border-line bg-surface')}>
-        {!isUser && <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">MYCO AI</p>}
+      {!compact && (
+        <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full', isUser ? 'border border-line-strong bg-surface-2 text-ink-2' : 'bg-spore text-spore-ink')} aria-hidden>
+          {isUser ? <UserIcon className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+        </div>
+      )}
+      <div className={cn('min-w-0 px-3.5 py-2.5', compact ? 'max-w-[88%]' : 'max-w-[85%]', isUser ? 'rounded-2xl rounded-br-md bg-spore text-spore-ink' : 'rounded-2xl rounded-bl-md border border-line bg-surface-2')}>
+        {!isUser && !compact && <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">MYCO AI</p>}
         {isUser ? (
-          <p className="whitespace-pre-wrap text-sm text-ink">{m.content}</p>
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{m.content}</p>
         ) : (
           <div className="prose-chat">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{detailed ? m.content : cleanContent(m.content)}</ReactMarkdown>
           </div>
         )}
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-3">
+        <div className={cn('mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]', isUser ? 'text-spore-ink/70' : 'text-ink-3')}>
           <span title={fmtDateTime(m.created_at)}>{fmtAgo(m.created_at)}</span>
           {!isUser && m.mode === 'llm' && (
             <Badge tone="brand" title={detailed ? `${m.model} · ${m.latency_ms ?? '?'} ms · ${m.prompt_tokens ?? '?'}+${m.completion_tokens ?? '?'} tokens` : 'Written by the language model from your stored data'}>
@@ -85,7 +87,7 @@ export function SuggestionChips({ questions, onPick, disabled, limit = 6, classN
   return (
     <div className={cn('flex flex-wrap gap-1.5', className)}>
       {questions.slice(0, limit).map((q) => (
-        <button key={q} type="button" onClick={() => onPick(q)} disabled={disabled} className="rounded-full border border-line bg-surface-2 px-2.5 py-1 text-[11px] text-ink-2 transition-colors hover:border-brand/60 hover:text-ink disabled:opacity-50">
+        <button key={q} type="button" onClick={() => onPick(q)} disabled={disabled} className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink-2 transition-colors hover:border-spore hover:text-ink disabled:opacity-50">
           {q}
         </button>
       ))}
@@ -131,11 +133,11 @@ export function ChatPanel({ chat, compact, autoAsk, onAutoAsked, className, inpu
           <ErrorState error={conversation.error} onRetry={() => conversation.refetch()} />
         ) : empty ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-6 text-center">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-brand/40 bg-brand/10 text-brand">
-              <Bot className="h-5 w-5" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-spore text-spore-ink">
+              <Sparkles className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-ink">Hi, I’m MYCO AI</p>
+              <p className="font-display text-lg text-ink">Hi, I’m MYCO AI</p>
               <p className="mx-auto mt-1 max-w-sm text-xs text-ink-3">Ask me how your chamber is doing, why something switched on, or what to look for next. I answer from your real readings and tell you when a value is simulated or estimated.</p>
             </div>
             <SuggestionChips questions={suggestions} onPick={submit} disabled={isSending} className="justify-center" limit={compact ? 4 : 6} />
@@ -149,7 +151,12 @@ export function ChatPanel({ chat, compact, autoAsk, onAutoAsked, className, inpu
               <>
                 <MessageBubble compact={compact} m={{ id: -1, role: 'user', content: pendingUser, created_at: new Date().toISOString(), mode: null, provider: null, model: null, prompt_tokens: null, completion_tokens: null, latency_ms: null, context_snapshot: null, error: null }} />
                 <div className="flex items-center gap-2 text-xs text-ink-3">
-                  <Loading label="MYCO AI is reading your chamber data…" className="py-0" />
+                  <span className="inline-flex items-center gap-1 rounded-2xl rounded-bl-md border border-line bg-surface-2 px-3.5 py-3" aria-hidden>
+                    <i className="h-[7px] w-[7px] rounded-full bg-ink-3 animate-blink" />
+                    <i className="h-[7px] w-[7px] rounded-full bg-ink-3 animate-blink [animation-delay:150ms]" />
+                    <i className="h-[7px] w-[7px] rounded-full bg-ink-3 animate-blink [animation-delay:300ms]" />
+                  </span>
+                  <span>MYCO AI is reading your chamber data…</span>
                   <Button size="xs" variant="ghost" icon={<Square className="h-3 w-3" />} onClick={stop}>
                     Stop
                   </Button>
@@ -181,15 +188,21 @@ export function ChatPanel({ chat, compact, autoAsk, onAutoAsked, className, inpu
                 submit();
               }
             }}
-            placeholder="Ask MYCO AI anything about your grow…"
-            className="min-h-[44px] max-h-40"
+            placeholder={compact ? 'Type your question' : 'Ask MYCO AI anything about your grow…'}
+            className={cn('max-h-40 min-h-[48px]', compact && 'rounded-3xl px-4 py-3 text-[15px]')}
             rows={1}
             maxLength={4000}
             disabled={isSending}
           />
-          <Button type="submit" variant="primary" icon={<Send className="h-3.5 w-3.5" />} loading={isSending} disabled={!draft.trim()} aria-label="Send">
-            {compact ? null : 'Send'}
-          </Button>
+          {compact ? (
+            <button type="submit" disabled={!draft.trim() || isSending} aria-label="Send" className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-spore text-spore-ink disabled:opacity-50">
+              <Send className="h-4 w-4" />
+            </button>
+          ) : (
+            <Button type="submit" variant="primary" icon={<Send className="h-3.5 w-3.5" />} loading={isSending} disabled={!draft.trim()} aria-label="Send">
+              Send
+            </Button>
+          )}
         </form>
         <p className="mt-1.5 text-[10px] text-ink-3">MYCO AI explains and suggests – it never switches equipment on or off. Double-check important decisions against the live readings.</p>
       </div>

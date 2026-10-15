@@ -122,10 +122,19 @@ selector and on every page that displays readings.
   in the simple view and always open in the detailed view. Pages use
   `useViewMode().detailed` to swap copy (e.g. "hysteresis" ↔ "temperature
   buffer", rule keys, device ids, model names).
-* `AssistantProvider` + `AssistantDrawer`: `ask(question)` opens the slide-over
-  chat (or hands the question to the assistant page when it is open) and sends
-  it in the selected device's context. The chat logic lives in
-  `useAssistantChat` and is shared by the drawer and the full page.
+* `AssistantProvider` + `AssistantDrawer`: `ask(question)` opens the floating
+  chat window (bottom sheet on phones; triggered by the `AskBubble` in the app
+  shell) or hands the question to the assistant page when it is open, and
+  sends it in the selected device's context. The chat logic lives in
+  `useAssistantChat` and is shared by the window and the full page.
+* Home page (`pages/Home.tsx`): cap / gills / stem layout (`.cap`, `.gills`,
+  `.stem` in `index.css`). `verdict()` turns a displayed value + target band
+  into fixed grower words (arithmetic only); `StageStepper` offers the
+  previous / next profile stage and writes a stage event only after the
+  operator confirms the dialog (`POST /api/batches/{id}/stage`); the switches
+  call `POST /api/control/{id}/command` only in manual mode for operators and
+  render the chamber-confirmed state, so a sent command never looks "done"
+  before the device reports it.
 * Home briefing: `GET /api/ai/insight` (`app/ai/insight.py` builds the
   deterministic structure from the assistant context; `AIService.insight`
   optionally adds an LLM narrative and caches per device/batch for 10 min).

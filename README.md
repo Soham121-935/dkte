@@ -19,14 +19,18 @@ Ten sections: Overview · Live Monitoring · Cultivation Batches · Growth
 Timeline · AI Predictions · Environmental Control · AI Cultivation Assistant ·
 Analytics and Reports · Device Management · System Settings.
 
-**Plain-language first.** The UI opens in a *Simple* view written for growers:
-the home page starts with a "MYCO AI says" briefing (status in words, what
-needs attention, one next step), readings are marked *Good / Too low / Too
-high*, and MYCO AI can be asked from any page through the **Ask MYCO AI**
-button / slide-over. Device ids, message ids, bucket sizes, rule keys, model
-names and controller decision traces are hidden behind "technical details"
-blocks until you switch to the *Detailed* view (header toggle or System
-Settings; remembered per browser).
+**Plain-language first.** The home page draws the chamber as a mushroom:
+the *cap* shows the two readings that matter in big type with grower words
+(*Just right*, *Air is a bit dry*, …) against the real target band, the
+batch's stage stepper (stages change only when you confirm them) and MYCO AI's
+one-line briefing with an **Ask MYCO AI what to do** button; the *stem* holds
+the humidifier / fan / heater switches, which follow the chamber's confirmed
+state and the control mode (Automatic · Manual · Watch only). A floating
+**Ask MYCO AI** bubble opens the chat window on every page. Device ids,
+message ids, rule keys, model names and controller decision traces stay behind
+"technical details" blocks until you switch to the *Detailed* view (header
+toggle or System Settings; remembered per browser). Fonts (Figtree, Young
+Serif) are bundled – no third-party requests from the browser.
 
 ---
 
@@ -215,8 +219,15 @@ under *System Settings*.
   configured a short narrative is added and labelled *Written by MYCO AI*,
   otherwise the card says *From your data (AI offline)*. Cached 10 min per
   device.
-* Assistant drawer on every page with "Ask MYCO AI about this" shortcuts on
-  alerts, recommendations, anomalies, equipment state and batch stage.
+* Floating "Ask MYCO AI" bubble on every page (chat window on desktop, bottom
+  sheet on phones) with "Ask MYCO AI about this" shortcuts on alerts,
+  recommendations, anomalies, equipment state and batch stage.
+* Home page switches: in *Manual* mode an operator can switch the humidifier,
+  fan or heater straight from the home page – the request goes through the
+  same control service (interlocks, min switching interval, heater cut-off)
+  and the switch only shows *Running / Off* once the chamber confirms it. In
+  *Automatic* / *Watch only* mode the switches explain what to do instead of
+  sending anything.
 
 ### Platform
 * Users with roles viewer / operator / admin, settings UI with validation,
