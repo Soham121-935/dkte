@@ -92,6 +92,8 @@ export interface Device {
   id: string;
   name: string;
   kind: 'hardware' | 'simulated' | string;
+  /** `camera` = the ESP32-CAM (no actuators, never selectable as a chamber). */
+  role?: 'chamber' | 'camera';
   transport: 'simulator' | 'http' | 'mqtt' | string;
   firmware_version: string | null;
   hardware_notes: string | null;
@@ -781,4 +783,107 @@ export interface LiveEvent<T = unknown> {
   type: string;
   ts?: string;
   data: T;
+}
+
+/* ------------------------------------------------------------ camera / phase recognition */
+
+export type CaptureStatus = 'matched' | 'no_match' | 'unreadable' | 'unavailable';
+export type CaptureConfidence = 'high' | 'medium' | 'low';
+
+export interface ReferenceCardInfo {
+  key: string;
+  species_key: string;
+  species: string;
+  latin_name: string;
+  profile_name: string;
+  phase_key: string;
+  phase: string;
+  stage_key: string;
+  what_you_see: string;
+  qr_payload: string;
+  image_url: string;
+  image_available?: boolean;
+}
+
+export interface CameraCapture {
+  id: number;
+  camera_device_id: string | null;
+  target_device_id: string | null;
+  captured_at: string;
+  source: 'esp32cam' | 'upload' | string;
+  trigger: 'auto' | 'manual' | 'upload' | string;
+  image_url: string;
+  width: number | null;
+  height: number | null;
+  size_bytes: number | null;
+  status: CaptureStatus;
+  method: 'qr' | 'features' | null;
+  confidence: CaptureConfidence | null;
+  inliers: number;
+  second_inliers: number;
+  qr_text: string | null;
+  card: ReferenceCardInfo | null;
+  species_key: string | null;
+  phase_key: string | null;
+  stage_key: string | null;
+  message: string | null;
+  candidates: { key: string; inliers: number; good_matches: number }[];
+  applied: boolean;
+  applied_at: string | null;
+  applied_batch_id: number | null;
+  applied_stage_key: string | null;
+  applied_by: string | null;
+  apply_note: string | null;
+}
+
+export interface CameraStatus {
+  camera_device_id: string;
+  camera_registered: boolean;
+  camera_has_token: boolean;
+  online: boolean;
+  last_poll_at: string | null;
+  last_seen_at: string | null;
+  manual_pending: boolean;
+  manual_requested_at: string | null;
+  auto_interval_seconds: number;
+  auto_apply: boolean;
+  auto_mode: boolean;
+  target_device_id: string;
+  target_control_mode: ControlMode | null;
+  active_batch: { id: number; code: string; species: string; stage_key: string | null; profile_name: string | null } | null;
+  last_capture: CameraCapture | null;
+  recognition: { available: boolean; error: string | null; indexed: number; missing: string[]; min_inliers: number; features_per_image: number };
+  reference_cards: number;
+}
+
+export interface ReferencePhase extends ReferenceCardInfo {
+  stage_name: string;
+  targets: Targets | Record<string, number | null>;
+  typical_duration_days: { min: number; max: number } | null;
+}
+
+export interface ReferenceSet {
+  species: {
+    key: string;
+    code: string;
+    common_name: string;
+    latin_name: string;
+    profile_id: number | null;
+    profile_name: string;
+    profile_source: string | null;
+    source_notes: string | null;
+    phases: ReferencePhase[];
+  }[];
+  cards: number;
+  images_available: number;
+  pdf_url: string;
+  qr_format: string;
+  note: string;
+}
+
+export interface CaptureRequestResponse {
+  requested: boolean;
+  camera_online: boolean;
+  target_device_id: string;
+  message: string;
 }

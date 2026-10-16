@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..core.events import bus
 from ..db.models import ActuatorCommand, ActuatorStatusEvent, Device, SensorReading, SystemEvent
 from ..schemas.telemetry import ACTUATORS, CommandStatusV1, DeviceStatusV1, TelemetryV1
@@ -47,6 +48,7 @@ def device_to_dict(d: Device) -> dict[str, Any]:
         "id": d.id,
         "name": d.name,
         "kind": d.kind,
+        "role": "camera" if d.id == get_settings().camera_device_id else "chamber",
         "transport": d.transport,
         "firmware_version": d.firmware_version,
         "hardware_notes": d.hardware_notes,

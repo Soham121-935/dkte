@@ -19,12 +19,16 @@ function pickDefault(devices: Device[]): string | null {
   const hardwareOnline = devices.find((d) => d.kind === 'hardware' && d.connection_status === 'online');
   if (hardwareOnline) return hardwareOnline.id;
   const online = devices.find((d) => d.connection_status === 'online');
-  return (online ?? devices[0]).id;
+  if (online) return online.id;
+  // nothing online yet: prefer the real chamber over the simulator so the page waits for the ESP32 instead of showing demo data
+  const hardware = devices.find((d) => d.kind === 'hardware');
+  return (hardware ?? devices[0]).id;
 }
 
 export function DeviceProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, error } = useDevices();
-  const devices = useMemo(() => data ?? [], [data]);
+  // the ESP32-CAM is a device too, but it is not a chamber you can select
+  const devices = useMemo(() => (data ?? []).filter((d) => d.role !== 'camera'), [data]);
   const [deviceId, setDeviceIdState] = useState<string | null>(() => {
     try {
       return localStorage.getItem(KEY);

@@ -132,6 +132,12 @@ export function LiveProvider({ children }: { children: ReactNode }) {
           case 'telemetry_rejected':
             scheduleInvalidate('events', ['events'], 1000);
             break;
+          case 'camera_capture':
+            scheduleInvalidate('vision', ['vision'], 200);
+            scheduleInvalidate('batches', ['batches'], 400);
+            scheduleInvalidate('control', ['control'], 600);
+            scheduleInvalidate('devices', ['devices'], 600);
+            break;
           default:
             break;
         }

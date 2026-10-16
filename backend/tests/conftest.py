@@ -35,6 +35,14 @@ os.environ.update(
         "NOTIFY_WEBHOOK_URL": "",
         "SMTP_HOST": "",
         "DEVICE_OFFLINE_AFTER_SECONDS": "90",
+        "HARDWARE_DEVICE_TOKEN": "",
+        "CAMERA_DEVICE_ID": "myco-cam-01",
+        "CAMERA_DEVICE_TOKEN": "",
+        "CAMERA_TARGET_DEVICE_ID": "",
+        "CAMERA_AUTO_INTERVAL_SECONDS": "1800",
+        "CAMERA_MIN_INLIERS": "20",
+        "CAMERA_AUTO_APPLY": "true",
+        "CAMERA_AUTO_MODE": "true",
     }
 )
 
@@ -65,6 +73,9 @@ def _reset_database() -> None:
 
     alert_engine._pending_since.clear()
     reset_ai_service()
+    from app.vision.service import state as camera_state
+
+    camera_state.reset()
     with get_sessionmaker()() as db:
         bootstrap(db)
         db.commit()

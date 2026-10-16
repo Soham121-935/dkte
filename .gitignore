@@ -47,3 +47,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+firmware/esp32cam/myco_cam/config.h
+
+# ---- secrets that must never be committed ----
+# Firebase / Google service-account keys (one was uploaded by mistake – revoke it in the Firebase console)
+*firebase-adminsdk*.json
+*-service-account*.json

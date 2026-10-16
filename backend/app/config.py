@@ -81,6 +81,20 @@ class Settings(BaseSettings):
     simulator_backfill_step_seconds: int = 60
     demo_seed: bool = True
     hardware_device_id: str = "myco-esp32-01"
+    # Optional fixed device tokens (hashed into the DB at start-up) so the firmware can
+    # be flashed with a known token instead of generating one in Device Management.
+    hardware_device_token: str = ""
+
+    # ------------------------------------------------------------- camera
+    # ESP32-CAM phase recognition (see app/vision). The camera is its own device.
+    camera_device_id: str = "myco-cam-01"
+    camera_device_token: str = ""
+    camera_target_device_id: str = ""  # chamber whose batch/stage the camera result is applied to (default: hardware device)
+    camera_auto_interval_seconds: int = 1800  # how often the ESP32-CAM takes a photo on its own
+    camera_min_inliers: int = 20  # feature-match threshold; below this a photo is reported as "no match"
+    camera_auto_apply: bool = True  # apply high/medium confidence results to the batch stage automatically
+    camera_auto_mode: bool = True  # switch the target chamber to automatic control when a phase is applied
+    camera_max_upload_bytes: int = 4 * 1024 * 1024
 
     # ---------------------------------------------------- background tasks
     background_tasks_enabled: bool = True

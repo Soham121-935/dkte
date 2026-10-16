@@ -1,9 +1,22 @@
 # MYCO AI – mushroom cultivation & predictive monitoring
 
-A runnable, production-oriented web application for one small mushroom-growing
-chamber built from an **ESP32, a DHT11, an analog substrate-moisture probe, a
-12 V fan, a tungsten-bulb heater behind a relay and a USB ultrasonic
-humidifier** (see `MYCO_AI_Project_Concept_and_Hardware_Reference.pdf`).
+A runnable web application for one small mushroom-growing chamber built from
+an **ESP32, a DHT11, an analog substrate-moisture probe, a 12 V fan on a motor
+driver, a tungsten-bulb heater behind a relay, a USB ultrasonic humidifier and
+an ESP32-CAM** (see `MYCO_AI_Project_Concept_and_Hardware_Reference.pdf` and
+`docs/hardware.md`). The current build is **demonstration-oriented**: the
+decisions are deterministic and explainable rather than "AI decides".
+
+**How the demo works.** Three mushroom species (oyster, shiitake, lion's mane)
+each have a fixed set of growth phases with real-world temperature / humidity
+ranges. The ESP32-CAM photographs the grow bag – automatically every 30 min or
+when you press *Take a photo now* on the Overview. The backend matches the
+photo against a **printed set of reference cards**
+(`docs/mushroom-reference-cards.pdf`), finds the species and the phase, sets
+that phase on the chamber's batch and the ESP32 is driven to that phase's
+ranges by the deterministic control service. The dashboard shows only what the
+ESP32 actually measured – when it is not connected the page says
+**DISCONNECTED** instead of inventing numbers.
 
 * **Frontend** – React 18 + TypeScript + Vite + Tailwind + Recharts + Lucide,
   a single light theme in the style of the Sporehouse concept
@@ -20,7 +33,7 @@ humidifier** (see `MYCO_AI_Project_Concept_and_Hardware_Reference.pdf`).
 
 | Page | What is on it |
 |---|---|
-| **Overview** (`/`) | Live monitoring, manual control and the AI assistant. The chamber is drawn as a mushroom: the *cap* shows temperature and humidity in big type with grower words (*Just right*, *Air is a bit dry*, …) against the real target band, the batch's stage stepper (stages change only when you confirm them) and MYCO AI's one-line briefing; the *stem* holds the humidifier / fan / heater switches (Automatic · Manual · Watch only), which follow the chamber's *confirmed* state. Below: readings over the last 1 h / 6 h / 24 h, open alerts (ask MYCO AI about one, mark as seen), "What MYCO AI noticed" and the MYCO AI chat itself. |
+| **Overview** (`/`) | Live monitoring, manual control and the AI assistant. The chamber is drawn as a mushroom: the *cap* shows temperature and humidity in big type with grower words (*Just right*, *Air is a bit dry*, …) against the real target band, the batch's stage stepper (stages change only when you confirm them) and MYCO AI's one-line briefing; the *stem* holds the humidifier / fan / heater switches (Automatic · Manual · Watch only), which follow the chamber's *confirmed* state. Below: the **Chamber camera** panel (last ESP32-CAM photo, what was recognised and how sure it is, *Take a photo now*, *Upload a photo* fallback, link to the printable cards), readings over the last 1 h / 6 h / 24 h, open alerts (ask MYCO AI about one, mark as seen), "What MYCO AI noticed" and the MYCO AI chat itself. |
 | **Stats** (`/stats`) | What happened over the last 7 or 30 days: time on target, averages, equipment run time, data gaps, alerts grouped by type, a day-by-day table and CSV exports. |
 | **Predictions** (`/predictions`) | Next-hour temperature/humidity trend forecasts with uncertainty bands, stage timing estimate with its confidence basis, rule-based "anything unusual?" findings, recommendations (what we noticed / why / suggested action) and how good past forecasts were. |
 
@@ -60,10 +73,15 @@ npm install
 npm run dev                      # http://localhost:5173 (proxies /api and /ws to :8000)
 ```
 
-Open http://localhost:5173. The header shows **DEMO MODE** while only the
-simulator is running. With `OPEN_ACCESS=true` (the default in `.env.example`,
-prototype only) there is no sign-in: anyone who can reach the app acts as the
-local operator (control modes, switches, stage confirmation, alerts).
+Open http://localhost:5173. The Overview shows the **real ESP32 chamber**
+(`HARDWARE_DEVICE_ID`) and says **DISCONNECTED** until the board posts its
+first reading – there are no demo values. If you want to explore without
+hardware, set `SIMULATOR_ENABLED=true` in `backend/.env`; the simulated chamber
+is then selectable in *Connections* and everything it produces is labelled
+*Simulated* / **DEMO MODE**. With `OPEN_ACCESS=true` (the default in
+`.env.example`, prototype only) there is no sign-in: anyone who can reach the
+app acts as the local operator (control modes, switches, stage confirmation,
+alerts).
 Administrative API routes (users, settings, device tokens, simulator
 scenarios) still need an admin token – obtain one with
 `POST /api/auth/login` using `ADMIN_USERNAME` / `ADMIN_PASSWORD` and use it
@@ -73,12 +91,48 @@ any more.
 
 API docs: http://localhost:8000/api/docs
 
+### Demo flow (camera → phase → chamber)
+
+1. Put the chamber token and the camera token from `backend/.env`
+   (`HARDWARE_DEVICE_TOKEN`, `CAMERA_DEVICE_TOKEN`) into the two firmware
+   `config.h` files together with your Wi-Fi and the backend's LAN IP, flash
+   `firmware/esp32/myco_esp32` and `firmware/esp32cam/myco_cam`
+   (see the READMEs next to them; pin map below).
+2. Print `docs/mushroom-reference-cards.pdf` (also served at
+   `http://localhost:8000/api/vision/reference.pdf`) – 13 cards, one per
+   species/phase, each with a picture and a QR code. The backend was indexed on
+   exactly these images.
+3. Hold a card in front of the ESP32-CAM and press **Take a photo now** on the
+   Overview (or use **Upload a photo** with a phone picture of the card).
+4. Within a few seconds the camera panel shows the photo, *Oyster · Pinning*
+   (for example), how sure the match is and that it was applied. The batch's
+   stage changes, the chamber switches to *Automatic* and the control service
+   drives the fan / humidifier / heater towards that phase's ranges
+   (15–20 °C, 90–95 % RH for oyster pinning). The decision trace in the control
+   panel explains every command.
+5. Hold up a different card to move to the next phase; a card of another
+   species archives the current batch and starts a new one.
+
+The recogniser knows these printed cards only – it is not a general mushroom
+classifier. Unsure matches are shown but not applied until you press *Use this
+phase anyway*; "no match" never changes anything.
+
+### Chamber controller pin map
+
+| Function | GPIO |
+|---|---|
+| DHT11 data | 4 |
+| Moisture probe (analog) | 34 |
+| Fan – motor driver IN3 / IN4 / EN2 | 26 / 27 / 25 |
+| Humidifier driver | 18 |
+| Heater relay IN | **19 (suggested** – free, output-capable, not a strapping pin; alternatives 23 / 32 / 33) |
+
 ### Tests
 
 ```bash
 scripts/test.sh                                   # everything below
-cd backend && .venv/bin/python -m pytest -q       # 144 backend tests
-cd frontend && npm run lint && npm test           # tsc type-check + 52 vitest tests
+cd backend && .venv/bin/python -m pytest -q       # 178 backend tests (incl. 28 camera/recognition tests)
+cd frontend && npm run lint && npm test           # tsc type-check + 70 vitest tests
 # optional: render every page against a running backend
 cd frontend && MYCO_LIVE_BACKEND=http://127.0.0.1:8000 npx vitest run src/test/live-smoke.test.tsx
 ```
@@ -132,8 +186,9 @@ important ones:
 | `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`, `AI_PROVIDER` | server-side AI provider (OpenAI-compatible chat completions; NVIDIA API Catalog by default). **Backend only.** |
 | `AI_TIMEOUT_SECONDS`, `AI_MAX_RETRIES`, `AI_RATE_LIMIT_PER_MINUTE`, `AI_MAX_OUTPUT_TOKENS`, `AI_TEMPERATURE`, `AI_ENABLE_JSON_MODE` | adapter behaviour |
 | `MQTT_ENABLED`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_TLS`, `MQTT_TOPIC_PREFIX`, `MQTT_REQUIRE_DEVICE_TOKEN` | physical device transport |
-| `SIMULATOR_ENABLED`, `SIMULATOR_DEVICE_ID`, `SIMULATOR_INTERVAL_SECONDS`, `SIMULATOR_BACKFILL_HOURS`, `DEMO_SEED` | demo mode (simulated device, demo batch, 7 days of back-filled history) |
-| `HARDWARE_DEVICE_ID` | id of the placeholder hardware device created at first start |
+| `SIMULATOR_ENABLED`, `SIMULATOR_DEVICE_ID`, `SIMULATOR_INTERVAL_SECONDS`, `SIMULATOR_BACKFILL_HOURS`, `DEMO_SEED` | optional simulated chamber (off by default – the page shows the ESP32) |
+| `HARDWARE_DEVICE_ID`, `HARDWARE_DEVICE_TOKEN` | the ESP32 chamber controller and the token its firmware sends in `X-Device-Token` |
+| `CAMERA_DEVICE_ID`, `CAMERA_DEVICE_TOKEN`, `CAMERA_TARGET_DEVICE_ID`, `CAMERA_AUTO_INTERVAL_SECONDS`, `CAMERA_MIN_INLIERS`, `CAMERA_AUTO_APPLY`, `CAMERA_AUTO_MODE` | the ESP32-CAM, which chamber its result is applied to, automatic photo interval, match threshold and whether a match sets the stage / switches the chamber to automatic |
 | `CONTROL_LOOP_INTERVAL_SECONDS`, `PREDICTION_INTERVAL_SECONDS`, `DEVICE_OFFLINE_AFTER_SECONDS`, `BACKGROUND_TASKS_ENABLED` | background tasks |
 | `NOTIFY_WEBHOOK_URL`, `SMTP_*` | optional external alert channels |
 | `CORS_ORIGINS`, `UPLOAD_DIR`, `LOG_LEVEL` | misc |
@@ -240,6 +295,28 @@ thresholds, control defaults) live in the database and are edited through
   *Watch only* mode the switches explain what to do instead of sending
   anything.
 
+### Camera & phase recognition (`backend/app/vision`, `/api/vision/*`)
+* 13 reference cards (3 species × their phases) with QR codes
+  (`MYCO:<species>:<phase>`) and reference pictures, rendered into
+  `docs/mushroom-reference-cards.pdf` by `scripts/build_reference_pdf.py` and
+  served at `/api/vision/reference.pdf`.
+* Recognition on the backend with OpenCV: QR decode first (multi-scale), then
+  ORB features + ratio test + RANSAC homography against the indexed reference
+  pictures; the inlier count against the runner-up decides *Sure / Fairly
+  sure / Unsure*; below `CAMERA_MIN_INLIERS` the photo is *no match*. Every
+  capture stores the image, the method, the numbers and what (if anything)
+  changed.
+* Camera device protocol: `GET /api/vision/pending` (poll) and
+  `POST /api/vision/capture` (raw JPEG) with the camera token; operator side:
+  `POST /api/vision/capture-request` (the *Take a photo now* button),
+  `POST /api/vision/upload` (browser fallback), capture list, explicit
+  `…/apply` with `force` for unsure matches. Applying a card sets the batch
+  stage (creating the batch, or archiving it and starting a new one when the
+  species changes) and switches the chamber to automatic.
+* Honesty rules: uploads are labelled `source: upload`, unsure matches are not
+  applied automatically, the panel says *camera offline* until the ESP32-CAM
+  has polled, and the status reports which cards are missing a picture.
+
 ### Platform
 * Users with roles viewer / operator / admin (API; the UI has no sign-in while
   `OPEN_ACCESS=true`), settings with validation, system events audit log,
@@ -252,9 +329,9 @@ thresholds, control defaults) live in the database and are edited through
 
 | Status | Features |
 |---|---|
-| **Works out of the box (demo mode)** | all three pages, simulator with scenarios (high temperature, low humidity, sensor fault, device disconnect, actuator failure, watering, recovery), 7 days of back-filled simulated history, batches/profiles/timeline, alerts, analytics, predictions, control loop against the simulated device, deterministic assistant fallback |
+| **Works out of the box** | all three pages, printable reference cards + recognition (test it with *Upload a photo*), batches/profiles/timeline, alerts, analytics, predictions, control loop, deterministic assistant fallback; optional simulator with scenarios (high temperature, low humidity, sensor fault, device disconnect, actuator failure, watering, recovery) when `SIMULATOR_ENABLED=true` |
 | **Credential-gated** | LLM answers in the assistant (`AI_API_KEY` + reachable provider – verify with `GET /api/ai/diagnostics`, admin token); webhook / e-mail alert channels (`NOTIFY_WEBHOOK_URL`, `SMTP_*`); MQTT broker login |
-| **Hardware-gated** | LIVE mode, *Measured* readings, real relay confirmations – require the ESP32 (or `scripts/http_device.py` for a software stand-in over the HTTP transport); moisture calibration; humidifier driver behaviour |
+| **Hardware-gated** | LIVE mode, *Measured* readings, real relay confirmations – require the ESP32 (or `scripts/http_device.py` for a software stand-in over the HTTP transport); automatic / button-triggered photos require the ESP32-CAM; moisture calibration; humidifier driver behaviour |
 | **Simulated** | everything produced by `myco-sim-01`: physics-style chamber model, not a real sensor. Always tagged *Simulated* / DEMO MODE |
 
 The NVIDIA API key supplied for this project was configured in `backend/.env`
@@ -269,19 +346,22 @@ deterministic fallback and says so.
 
 ## Hardware integration
 
-See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
-(flashing, broker, topics). Short version:
+See `docs/hardware.md` (BOM, pin map, phase ranges, safety),
+`firmware/esp32/README.md` (chamber controller) and
+`firmware/esp32cam/README.md` (camera). Short version:
 
-1. Register the device through the API (admin token):
-   `POST /api/devices` (kind hardware, transport mqtt or http) →
-   `POST /api/devices/{id}/token` → copy the one-time token. The device then
-   appears in the **Connections** dialog (gear icon).
-2. Flash `firmware/esp32/myco_esp32` with `config.h` (Wi-Fi, broker, device id,
-   token) – or run `python3 scripts/http_device.py --device-id … --token …`
-   to exercise the HTTP path without hardware.
-3. `MQTT_ENABLED=true` + broker settings in `backend/.env`, restart.
-4. Keep the device in *monitor* while wiring, test relays in *manual*, then
-   switch to *auto* with a batch assigned.
+1. Both devices are created at first start from `backend/.env`
+   (`HARDWARE_DEVICE_ID` / `HARDWARE_DEVICE_TOKEN`, `CAMERA_DEVICE_ID` /
+   `CAMERA_DEVICE_TOKEN`); a token can be rotated with
+   `POST /api/devices/{id}/token` (admin token, shown once).
+2. Flash `firmware/esp32/myco_esp32` and `firmware/esp32cam/myco_cam` with
+   their `config.h` (Wi-Fi, backend LAN URL, device id, token) – or run
+   `python3 scripts/http_device.py --device-id … --token …` to exercise the
+   HTTP path without hardware. The firmware speaks HTTP; MQTT remains available
+   (`MQTT_ENABLED=true` + broker settings) but is not needed.
+3. Keep the chamber in *Watch only* while wiring, test relays in *Manual*,
+   then let the camera (or you) set the phase – the chamber switches to
+   *Automatic*.
 
 ---
 
@@ -311,9 +391,17 @@ See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
 ## Known limitations
 
 * Single DHT11 + one moisture probe: coarse accuracy (±2 °C, ±5 % RH), RH
-  readings above ~90 % are unreliable, moisture is uncalibrated raw ADC. No
-  CO₂, light or camera, so FAE is time-based and growth stages must be
-  confirmed by the grower.
+  readings above ~90 % are unreliable (targets are capped at 95 %), moisture
+  is uncalibrated raw ADC. No CO₂ or light sensor, so FAE is time-based.
+* The camera recognises the **printed reference cards** (QR code, then image
+  features), not real mushrooms – on a live grow the stage is still confirmed
+  by the grower. Three lion's mane cards (pinning, fruiting, harvest ready)
+  currently have a QR code but no reference picture, so they are recognised by
+  QR only; drop `lions_mane_<phase>.jpg` into `backend/app/vision/reference/`
+  and run `scripts/build_reference_pdf.py` to complete the set.
+* The fan cannot cool below room temperature and the bulb only heats, so the
+  low end of a phase's temperature range depends on the room the chamber
+  stands in; the control service reports this instead of pretending.
 * The forecast is a statistical baseline (trend + persistence), not a trained
   model; stage estimates come from profile day ranges and confirmed stages.
   Accuracy numbers appear only once forecasts have been scored against actual
@@ -322,8 +410,9 @@ See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
   process; horizontal scaling needs an external pub/sub.
 * SQLite is sufficient for one chamber; switch to PostgreSQL for several
   devices or long retention.
-* The ESP32 sketch is a reference implementation and was not flashed on
-  hardware here; adapt relay polarity and humidifier triggering to your boards.
+* The two sketches were not flashed on hardware here; adapt relay polarity,
+  the heater pin and humidifier triggering to your boards. The fan runs at
+  full speed (no PWM) to stay compatible with ESP32 core 2.x and 3.x.
 * Provider capabilities (streaming, JSON mode, tool calling) are not assumed –
   the adapter uses plain chat completions and the diagnostics endpoint reports
   what the configured model supports.
@@ -337,7 +426,9 @@ See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
 
 * Additional sensors once available (CO₂ for FAE control, light, better T/RH
   sensor such as SHT31) – the telemetry schema already allows extra fields.
-* Camera-based observations and image timeline per batch.
+* Recognising real mushrooms (not printed cards) would need a trained image
+  model and labelled photos from this chamber; the capture pipeline and the
+  per-batch image history are in place for that.
 * Learned per-chamber thermal model for the forecast; yield tracking per batch
   to correlate environment and outcome across many batches.
 * Multi-chamber dashboards, PostgreSQL/Timescale deployment profile, Redis
@@ -348,10 +439,12 @@ See `docs/hardware.md` (BOM, assumptions, safety) and `firmware/esp32/README.md`
 ## Repository layout
 
 ```
-backend/        FastAPI app, services, AI adapter, IoT transports, Alembic, tests
-frontend/       React/TypeScript SPA, vitest tests, recorded API fixtures
-schemas/        JSON Schemas for the IoT contract (+ README with topics/auth)
-firmware/esp32/ reference Arduino sketch with local safety logic
-docs/           api.md, architecture.md, hardware.md
-scripts/        setup.sh, dev.sh, test.sh, export_schemas.py, http_device.py
+backend/           FastAPI app, services, AI adapter, IoT transports, Alembic, tests
+backend/app/vision Reference cards, QR + feature recognition, capture → phase service
+frontend/          React/TypeScript SPA, vitest tests, recorded API fixtures
+schemas/           JSON Schemas for the IoT contract (+ README with topics/auth)
+firmware/esp32/    chamber controller sketch (HTTP, local safety logic)
+firmware/esp32cam/ ESP32-CAM sketch (poll → photo → upload)
+docs/              api.md, architecture.md, hardware.md, mushroom-reference-cards.pdf
+scripts/           setup.sh, dev.sh, test.sh, export_schemas.py, http_device.py, build_reference_pdf.py
 ```

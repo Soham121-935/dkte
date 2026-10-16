@@ -307,3 +307,39 @@ class AppSetting(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[Any] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow, onupdate=utcnow)
+
+
+class CameraCapture(Base):
+    """One photo taken by the ESP32-CAM (or uploaded from the browser) and what the recogniser made of it."""
+
+    __tablename__ = "camera_captures"
+    __table_args__ = (Index("ix_camera_captures_captured", "captured_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    camera_device_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    target_device_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)
+    source: Mapped[str] = mapped_column(String(16), default="esp32cam")  # esp32cam|upload
+    trigger: Mapped[str] = mapped_column(String(16), default="auto")  # auto|manual|upload
+    image_path: Mapped[str] = mapped_column(String(256))
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="no_match")  # matched|no_match|unreadable|unavailable
+    method: Mapped[str | None] = mapped_column(String(16), nullable=True)  # qr|features
+    card_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    species_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    phase_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    stage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String(16), nullable=True)  # high|medium|low
+    inliers: Mapped[int] = mapped_column(Integer, default=0)
+    second_inliers: Mapped[int] = mapped_column(Integer, default=0)
+    qr_text: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    applied_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    applied_batch_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    applied_stage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    applied_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    apply_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=utcnow)

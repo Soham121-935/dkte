@@ -12,7 +12,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..core.security import hash_password
+from ..core.security import hash_password, hash_token
 from ..db.models import (
     ActuatorStatusEvent,
     Alert,
@@ -51,13 +51,51 @@ def ensure_devices(db: Session) -> tuple[Device, Device]:
         db.add(sim)
     hw = db.get(Device, settings.hardware_device_id)
     if hw is None:
-        hw = Device(id=settings.hardware_device_id, name="ESP32 mini warehouse", kind="hardware", transport="mqtt",
+        hw = Device(id=settings.hardware_device_id, name="ESP32 grow chamber", kind="hardware", transport="http",
                     control_mode="monitor", connection_status="unknown",
-                    hardware_notes="ESP32 + DHT11 + substrate moisture sensor; 12 V fan, tungsten bulb via relay, USB ultrasonic humidifier. "
-                                   "Generate a device token in Device Management before connecting.")
+                    hardware_notes="ESP32 + DHT11 (GPIO 4) + substrate moisture probe (GPIO 34); 12 V fan via L298N/L293D "
+                                   "(IN3 26, IN4 27, EN2 25), USB humidifier driver (GPIO 18), bulb relay (GPIO 19). "
+                                   "Talks HTTP to this backend (firmware/esp32/myco_esp32).")
         db.add(hw)
     db.flush()
+    ensure_camera_device(db)
+    apply_fixed_tokens(db)
     return sim, hw
+
+
+def ensure_camera_device(db: Session) -> Device:
+    """The ESP32-CAM is registered as its own (monitor-only) device so its uploads are authenticated."""
+    settings = get_settings()
+    cam = db.get(Device, settings.camera_device_id)
+    if cam is None:
+        cam = Device(id=settings.camera_device_id, name="ESP32-CAM phase camera", kind="hardware", transport="http",
+                     control_mode="monitor", connection_status="unknown",
+                     hardware_notes="AI-Thinker ESP32-CAM. Photographs the chamber / printed reference card and uploads "
+                                    "JPEGs to /api/vision/capture. Has no actuators (firmware/esp32cam/myco_cam).")
+        db.add(cam)
+        db.flush()
+    return cam
+
+
+def apply_fixed_tokens(db: Session) -> None:
+    """Store the hashes of tokens configured in .env so firmware can be flashed with known tokens.
+
+    Only the hash is persisted; rotating a token from Device Management still works and simply
+    stops matching the .env value until the firmware is updated.
+    """
+    settings = get_settings()
+    for device_id, token in ((settings.hardware_device_id, settings.hardware_device_token),
+                             (settings.camera_device_id, settings.camera_device_token)):
+        if not token:
+            continue
+        dev = db.get(Device, device_id)
+        if dev is None:
+            continue
+        digest = hash_token(token)
+        if dev.token_hash != digest:
+            dev.token_hash = digest
+            log.info("device %s token set from environment", device_id)
+    db.flush()
 
 
 def _targets_from_profile(profile: CultivationProfile, stage_key: str) -> dict[str, Any]:

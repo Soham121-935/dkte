@@ -50,7 +50,7 @@ Device-facing endpoints (`/api/ingest/*`) use the **per-device token** in the
 * `GET /api/auth/users`, `POST /api/auth/users` `{username,password,role}`, `PATCH /api/auth/users/{user_id}` `{role?,is_active?,password?}` – admin. Admins cannot demote or deactivate their own account.
 
 ### Devices (admin for writes)
-* `GET /api/devices`, `GET /api/devices/{device_id}` – includes `connection_status` (`online|stale|offline|unknown`), `control_mode`, `actuator_state` (`requested` / `confirmed` / `status: confirmed|pending|mismatch|unknown` per actuator), `stats`.
+* `GET /api/devices`, `GET /api/devices/{device_id}` – includes `connection_status` (`online|stale|offline|unknown`), `control_mode`, `actuator_state` (`requested` / `confirmed` / `status: confirmed|pending|mismatch|unknown` per actuator), `stats`, and `role` (`chamber` for a controller, `camera` for the ESP32-CAM registered as `CAMERA_DEVICE_ID` – the dashboard never offers the camera as a chamber).
 * `POST /api/devices` `{id,name,kind:hardware|simulated,transport:mqtt|http|simulator,hardware_notes?}` → 201 with the **one-time** `token` for hardware devices (409 if id exists).
 * `PATCH /api/devices/{device_id}` `{name?,hardware_notes?,is_enabled?,firmware_version?}`.
 * `POST /api/devices/{device_id}/token` – rotate token (returned once); `DELETE /api/devices/{device_id}/token` – revoke (device can no longer publish). 422 for simulated devices.
@@ -62,6 +62,26 @@ Device-facing endpoints (`/api/ingest/*`) use the **per-device token** in the
 * `GET /api/ingest/commands` – pending commands for the device (`{device_id, commands:[CommandV1]}`); they move to `sent`.
 * `POST /api/ingest/command-status` – `CommandStatusV1` (`applied|rejected|failed`).
 * `GET /api/ingest/commands/recent` – last 20 commands with their states (debugging).
+
+### Camera / phase recognition (ESP32-CAM)
+The ESP32-CAM is a separate device (`CAMERA_DEVICE_ID`, default `myco-cam-01`) with its own token. Photos are matched
+against the **printed reference card set** (QR code first, then ORB feature matching) and mapped onto a stage of the
+species' built-in reference profile; applying a result confirms that stage on the chamber's active batch (creating or
+archiving batches as needed) and – with `CAMERA_AUTO_MODE=true` – switches the chamber to automatic control. The
+recogniser only knows the cards; it is not a general mushroom classifier and never drives an actuator itself.
+
+Operator side (JWT operator or `OPEN_ACCESS`):
+* `GET /api/vision/status` – `{camera_device_id, online, manual_pending, auto_interval_seconds, target_device_id, target_control_mode, active_batch, last_capture, recognition:{available, indexed, missing, min_inliers}}`.
+* `POST /api/vision/capture-request` `{device_id?}` → 202 `{requested, camera_online, target_device_id, message}` – the "take a photo now" button; the camera picks the flag up on its next poll. `DELETE /api/vision/capture-request` cancels it.
+* `POST /api/vision/upload?device_id=&apply=` – multipart `file` (JPEG/PNG) as a browser fallback for the camera → 201 capture object; 415 for non-images, 413 above `CAMERA_MAX_UPLOAD_BYTES`.
+* `GET /api/vision/captures?limit=` / `GET /api/vision/captures/{capture_id}` – capture objects `{id, captured_at, source, trigger, image_url, status: matched|no_match|unreadable|unavailable, method: qr|features, confidence: high|medium|low, inliers, second_inliers, qr_text, card{species, phase, stage_key, …}, candidates[], applied, applied_batch_id, applied_stage_key, apply_note}`.
+* `POST /api/vision/captures/{capture_id}/apply` `{force?, device_id?}` – apply a result explicitly (needed for `low` confidence, `force=true`); 409 when the capture has no match.
+* `GET /api/vision/reference` – the card set: species × phases with `stage_key`, `targets` (temperature/humidity ranges from the reference profile), `qr_payload`, `image_url`, `image_available`.
+* `GET /api/vision/reference.pdf` – printable cards (`docs/mushroom-reference-cards.pdf`, built by `scripts/build_reference_pdf.py`); `GET /api/vision/reference/{key}.jpg` – one reference image.
+
+Camera side (`X-Device-Token` of the camera device; 403 for any other device's token):
+* `GET /api/vision/pending` – polled every few seconds → `{capture_now, trigger, target_device_id, auto_interval_seconds, poll_interval_seconds, server_time}`; marks the camera online.
+* `POST /api/vision/capture?trigger=auto|manual&device_id=` – raw `image/jpeg` body → 201 `{id, status, card_key, confidence, applied, message}`; 415 when the body is not a JPEG/PNG.
 
 ### Telemetry
 * `GET /api/telemetry/latest?device_id=` – latest reading + per-sensor values (`sensor_type,value,unit,measured_at,quality,source`) + active targets + staleness flag.
@@ -147,5 +167,6 @@ closes with code 4401 if it is missing/invalid). Message types:
 | `prediction` | `{stats}` – a prediction cycle finished |
 | `simulator` | `{scenario, status}` |
 | `transport` | MQTT/simulator availability changes |
+| `camera_capture` | `{capture}` – an ESP32-CAM photo (or a browser upload) was analysed or applied; `capture.applied`, `applied_stage_key` and `apply_note` say what changed |
 
 Nothing sent by the client is interpreted.

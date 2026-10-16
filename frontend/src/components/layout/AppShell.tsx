@@ -108,7 +108,7 @@ export function ConnectionsDialog({ open, onClose }: { open: boolean; onClose: (
         <div className="rounded-md border border-line bg-surface-2 p-3 text-xs text-ink-2">
           <p className="font-semibold text-ink">Your own chamber</p>
           <p className="mt-1">
-            Flash the ESP32 example in <span className="font-mono">firmware/esp32</span>, point it at this server and register the device ID with the API (see <span className="font-mono">docs/hardware.md</span>). It then appears in the list above and replaces the demo data.
+            Flash <span className="font-mono">firmware/esp32</span> on the chamber controller and <span className="font-mono">firmware/esp32cam</span> on the camera with the device tokens from the server's <span className="font-mono">backend/.env</span>, pointed at this server's LAN address (see <span className="font-mono">docs/hardware.md</span>). The page shows their readings as soon as they report – nothing is invented while they are disconnected.
             {sim && 'enabled' in sim && sim.enabled && ' The demo simulator keeps running until you turn it off in the server settings.'}
           </p>
         </div>

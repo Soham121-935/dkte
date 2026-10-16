@@ -33,6 +33,9 @@ export const qk = {
   simulator: ['simulator'] as const,
   users: ['users'] as const,
   events: (q: Record<string, unknown>) => ['events', q] as const,
+  camera: ['vision', 'status'] as const,
+  captures: ['vision', 'captures'] as const,
+  referenceSet: ['vision', 'reference'] as const,
 };
 
 export function useSystemStatus() {
@@ -91,4 +94,18 @@ export function useInsight(deviceId: string | null, batchId?: number | null) {
 export function useInvalidate() {
   const qc = useQueryClient();
   return (prefix: readonly unknown[]) => qc.invalidateQueries({ queryKey: prefix as unknown[] });
+}
+
+/** Camera status polls every 5 s (2 s while a manual photo is pending) so the card follows the ESP32-CAM without the socket. */
+export function useCameraStatus(enabled = true) {
+  return useQuery({
+    queryKey: qk.camera,
+    queryFn: endpoints.cameraStatus,
+    enabled,
+    refetchInterval: (query) => (query.state.data?.manual_pending ? 2000 : 5000),
+  });
+}
+
+export function useReferenceSet(enabled = true) {
+  return useQuery({ queryKey: qk.referenceSet, queryFn: endpoints.referenceSet, enabled, staleTime: 60 * 60 * 1000 });
 }

@@ -173,11 +173,22 @@ describe('home page', () => {
     expect(await screen.findByText(/now in Fruiting/)).toBeInTheDocument();
   });
 
+  it('puts the chamber camera on the Overview with the manual photo button and the printable card set', async () => {
+    renderApp(<App />);
+    const card = (await screen.findByText('Chamber camera')).closest('section')!;
+    await within(card).findByText('Oyster · Pinning');
+    expect(within(card).getByRole('button', { name: /Take a photo now/ })).toBeEnabled();
+    expect(within(card).getByRole('button', { name: /Upload a photo/ })).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: /Printable reference cards/ })).toHaveAttribute('href', '/api/vision/reference.pdf');
+    expect(fetchMock.calls.some((c) => c.url === '/api/vision/status')).toBe(true);
+  });
+
   it('a disconnected chamber is said so plainly and the switches stop sending', async () => {
     const user = userEvent.setup();
-    const offline = FIXTURES.devices.map((d) => (d.id === 'myco-sim-01' ? { ...d, connection_status: 'offline', control_mode: 'manual' } : d));
+    // nothing is online: the page falls back to the real ESP32 chamber (never the simulator) and says it is disconnected
+    const offline = FIXTURES.devices.map((d) => ({ ...d, connection_status: 'offline', control_mode: d.id === 'myco-esp32-01' ? 'manual' : d.control_mode }));
     fetchMock.on('GET', /^\/api\/devices$/, () => offline);
-    fetchMock.on('GET', /^\/api\/control\/myco-sim-01$/, () => ({ ...FIXTURES.control, mode: 'manual', device: { ...FIXTURES.control.device, connection_status: 'offline' } }));
+    fetchMock.on('GET', /^\/api\/control\/myco-esp32-01$/, () => ({ ...FIXTURES.control, mode: 'manual', device: { ...FIXTURES.control.device, id: 'myco-esp32-01', connection_status: 'offline' } }));
     renderApp(<App />);
     const cap = await screen.findByRole('region', { name: 'Chamber climate' });
     expect(await within(cap).findByText(/Chamber disconnected – last reading/)).toBeInTheDocument();

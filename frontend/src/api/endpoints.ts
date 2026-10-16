@@ -35,6 +35,10 @@ import type {
   SystemStatus,
   Timeline,
   User,
+  CameraCapture,
+  CameraStatus,
+  CaptureRequestResponse,
+  ReferenceSet,
 } from './types';
 
 export type RangeKey = '1h' | '6h' | '24h' | '7d' | '30d';
@@ -152,6 +156,23 @@ export const endpoints = {
   /** Returns the updated conversation summary, the last two messages (user + assistant) and the provider status. */
   sendMessage: (id: number, content: string, signal?: AbortSignal) =>
     api<{ conversation: Conversation; messages: AIMessage[]; ai: AIStatus }>(`/api/ai/conversations/${id}/messages`, { method: 'POST', body: { content }, signal }),
+
+  // ---- camera / phase recognition (ESP32-CAM)
+  cameraStatus: () => api<CameraStatus>('/api/vision/status'),
+  cameraCaptureRequest: (device_id?: string | null) =>
+    api<CaptureRequestResponse>('/api/vision/capture-request', { method: 'POST', body: { device_id: device_id ?? null } }),
+  cameraUpload: (file: File, device_id?: string | null, apply = true) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api<CameraCapture>('/api/vision/upload', { method: 'POST', formData: fd, query: { device_id: device_id ?? undefined, apply } });
+  },
+  cameraCaptures: (limit = 12) => api<CameraCapture[]>('/api/vision/captures', { query: { limit } }),
+  cameraApply: (id: number, force = false, device_id?: string | null) =>
+    api<{ capture: CameraCapture; result: { batch_id: number; batch_code: string; stage_key: string; stage_changed: boolean; mode_changed: boolean; notes: string[] } }>(
+      `/api/vision/captures/${id}/apply`,
+      { method: 'POST', body: { force, device_id: device_id ?? null } },
+    ),
+  referenceSet: () => api<ReferenceSet>('/api/vision/reference'),
 
   // ---- settings / simulator
   settings: () => api<SettingsResponse>('/api/settings'),

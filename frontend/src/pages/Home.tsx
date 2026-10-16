@@ -11,6 +11,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, Loading, Modal, Skeleton, 
 import { AIStatusDot, ChatPanel } from '@/components/assistant/ChatPanel';
 import { useAssistantChat } from '@/components/assistant/useAssistantChat';
 import { MetricChart, gapsFromRows, toChartRows } from '@/components/charts';
+import { CameraCard } from '@/components/camera/CameraCard';
 import { fmtAgo, titleCase } from '@/lib/format';
 import { cn, clamp } from '@/lib/utils';
 import type { Actuator, ActuatorEntry, AIInsight, Batch, ControlMode, InsightPoint, Reading, StageDefinition, Targets } from '@/api/types';
@@ -636,6 +637,7 @@ export default function Home() {
 
       {/* ------------------------------------------------------ monitoring */}
       <div className="mt-8 space-y-4">
+        <CameraCard deviceId={device.id} />
         <LiveChart deviceId={device.id} targets={targets} />
         <div className="grid gap-4 lg:grid-cols-2">
           <NoticedCard deviceId={device.id} batchId={batchId} insight={insight} />

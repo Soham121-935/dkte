@@ -18,6 +18,28 @@
                                                  data/myco.sqlite3
 ```
 
+### Camera → phase → chamber (demo build)
+
+```
+ ┌──────────────┐  GET /api/vision/pending (poll, X-Device-Token)      ┌──────────────────────────┐
+ │  ESP32-CAM   │─────────────────────────────────────────────────────►│ vision/service.py         │
+ │  (AI-Thinker)│  POST /api/vision/capture  (raw JPEG, auto|manual)   │  store photo → recognise  │
+ └──────────────┘◄─────────────────────────────────────────────────────│  (QR, then ORB+RANSAC vs  │
+        ▲                                                              │  reference pictures) →    │
+        │ "Take a photo now" sets capture_now                          │  species+phase → batch    │
+ ┌──────┴───────┐  POST /api/vision/capture-request                    │  stage → chamber auto     │
+ │  browser SPA │  POST /api/vision/upload (fallback, source=upload)   └────────────┬─────────────┘
+ └──────────────┘◄── WS camera_capture ─────────────────────────────────────────────┘
+                                                                                    │ stage targets
+                                                                                    ▼
+                                                      services/control.py → fan / humidifier / heater
+                                                      commands → ESP32 chamber controller (HTTP ingest)
+```
+
+The camera never carries commands; recognition only changes the *batch stage*,
+and the deterministic control service does the rest. Phase ranges live in the
+species profiles, not in the recogniser or the firmware.
+
 ## Data flow for one telemetry message
 
 1. **Transport** – MQTT subscriber (`iot/mqtt.py`), HTTP ingest router
@@ -61,12 +83,15 @@ against actual readings (`predictions.evaluated_at / error`).
 | Path | Responsibility |
 |---|---|
 | `backend/app/config.py` | `pydantic-settings` configuration from `.env` (see `.env.example`) |
-| `backend/app/db/models.py` | 15 tables: users, devices, sensor_readings, system_events, cultivation_profiles, cultivation_batches, batch_observations, stage_events, predictions, alerts, actuator_commands, actuator_status_events, ai_conversations, ai_messages, app_settings |
-| `backend/alembic/` | migrations (`0001_initial_schema`), run automatically at startup (`DB_AUTO_MIGRATE`) |
+| `backend/app/db/models.py` | 16 tables: users, devices, sensor_readings, system_events, cultivation_profiles, cultivation_batches, batch_observations, stage_events, predictions, alerts, actuator_commands, actuator_status_events, ai_conversations, ai_messages, app_settings, camera_captures |
+| `backend/alembic/` | migrations (`0001_initial_schema`, `0002_camera_captures`), run automatically at startup (`DB_AUTO_MIGRATE`) |
 | `backend/app/services/control.py` | deterministic control service – the **only** code path that creates actuator commands |
 | `backend/app/services/prediction.py` | baseline forecasting (trend + persistence blend, widening band), stage estimation from confirmed stages + profile day ranges, rule-based anomaly detection, recommendations, forecast scoring |
 | `backend/app/services/analytics.py` | bucketing, distributions, out-of-range time, duty cycles, missing intervals, periodic summaries, CSV |
 | `backend/app/ai/` | `provider.py` (OpenAI-compatible chat completions with timeouts/retries/circuit breaker), `context.py` (DB-derived context with timestamps and source labels), `fallback.py` (deterministic answers), `service.py` (rate limiting, usage accounting, conversation persistence) |
+| `backend/app/vision/` | `reference.py` (3 species × phases → cards, QR payload format), `matcher.py` (OpenCV multi-scale QR decode, ORB feature index over the reference pictures, ratio test + RANSAC homography, confidence from inlier margin), `service.py` (store capture, camera pending/online state, apply result to batch stage + control mode, status for the UI) |
+| `backend/app/api/vision.py` | camera-token endpoints (`pending`, `capture`) and operator endpoints (`status`, `capture-request`, `upload`, captures, `apply`, reference set, `reference.pdf`) |
+| `scripts/build_reference_pdf.py` | renders `docs/mushroom-reference-cards.pdf` (one card per species/phase: picture, QR, controller ranges) from the same images the matcher is indexed on |
 | `backend/app/iot/simulator.py` | physics-ish chamber model (ambient diurnal cycle, heater/fan/humidifier effects, substrate drying), scenario injection, history back-fill for demo mode |
 | `frontend/src/api` | typed client (`client.ts`), endpoint map, response types derived from live payloads |
 | `frontend/src/providers` | live WebSocket feed, device selection, toasts, assistant (chat window / inline chat) |

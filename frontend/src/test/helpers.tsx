@@ -45,6 +45,9 @@ import stageEnvironment from './fixtures/stage_environment.json';
 import batchReadings from './fixtures/batch_readings.json';
 import aiInsight from './fixtures/ai_insight.json';
 import conversationReply from './fixtures/conversation_reply.json';
+import cameraStatus from './fixtures/camera_status.json';
+import cameraCapture from './fixtures/camera_capture.json';
+import referenceSet from './fixtures/reference_set.json';
 
 export const FIXTURES = {
   systemStatus,
@@ -81,6 +84,9 @@ export const FIXTURES = {
   batchReadings,
   aiInsight,
   conversationReply,
+  cameraStatus,
+  cameraCapture,
+  referenceSet,
 };
 
 export type RouteHandler = (req: { method: string; url: URL; body: unknown; headers: Record<string, string> }) => unknown | Response | Promise<unknown>;
@@ -125,6 +131,10 @@ export function defaultRoutes(): [RegExp, RouteHandler][] {
     [/^\/api\/ai\/conversations\/\d+$/, ({ url }) => ({ ...conversationReply.conversation, id: Number(url.pathname.split('/').pop()), messages: [] })],
     [/^\/api\/settings$/, () => settings],
     [/^\/api\/simulator\/status$/, () => simulatorStatus],
+    [/^\/api\/vision\/status$/, () => cameraStatus],
+    [/^\/api\/vision\/captures$/, () => [cameraCapture]],
+    [/^\/api\/vision\/captures\/\d+$/, () => cameraCapture],
+    [/^\/api\/vision\/reference$/, () => referenceSet],
     [/^\/api\/auth\/me$/, () => json(401, { detail: 'Not authenticated' })],
   ];
 }

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import ai, alerts, analytics, auth, batches, control, devices, ingest, predictions, settings as settings_api, simulator as simulator_api, system, telemetry, ws
+from .api import ai, alerts, analytics, auth, batches, control, devices, ingest, predictions, settings as settings_api, simulator as simulator_api, system, telemetry, vision, ws
 from .config import get_settings
 from .core.events import bus
 from .core.logging_config import configure_logging, redact
@@ -108,7 +108,8 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": "Internal server error", "hint": redact(type(exc).__name__)})
 
     for router in (system.router, auth.router, devices.router, telemetry.router, ingest.router, batches.router, control.router,
-                   alerts.router, predictions.router, analytics.router, ai.router, settings_api.router, simulator_api.router, ws.router):
+                   alerts.router, predictions.router, analytics.router, ai.router, settings_api.router, simulator_api.router,
+                   vision.router, ws.router):
         app.include_router(router)
 
     upload_dir = Path(settings.upload_dir)

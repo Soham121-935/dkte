@@ -79,10 +79,12 @@ describe('AppShell with recorded backend data', () => {
     await user.click(screen.getByRole('button', { name: 'Connections' }));
     const dialog = await screen.findByRole('dialog', { name: 'Connections' });
     const select = within(dialog).getByLabelText('Chamber') as HTMLSelectElement;
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(FIXTURES.devices.map((d) => d.id));
+    // the ESP32-CAM is a device too, but it is not a chamber – it must not be offered here
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(FIXTURES.devices.filter((d) => d.role !== 'camera').map((d) => d.id));
     expect(select.options[0].text).toMatch(/demo simulator/);
     expect(within(dialog).getByText('MYCO AI model')).toBeInTheDocument();
-    expect(within(dialog).getByText(/firmware\/esp32/)).toBeInTheDocument();
+    expect(within(dialog).getByText('firmware/esp32')).toBeInTheDocument();
+    expect(within(dialog).getByText('firmware/esp32cam')).toBeInTheDocument();
     const other = FIXTURES.devices[1].id;
     await user.selectOptions(select, other);
     await waitFor(() => expect(fetchMock.calls.some((c) => c.url.startsWith('/api/telemetry/latest') && c.url.includes(`device_id=${other}`))).toBe(true));
