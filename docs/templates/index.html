@@ -1,0 +1,711 @@
+<!doctype html>
+<!--
+  MYCO AI – IoT webpage template (Overview page), single file, no build step.
+
+  This is the page we settled on: live monitoring of ONE chamber + manual control +
+  the ESP32-CAM phase camera + the MYCO AI assistant. Light theme only, Sporehouse style.
+
+  It talks to the MYCO AI backend with plain fetch() against the same /api routes the
+  React app uses, so nothing on it is a dead button and nothing is invented:
+    - readings come from /api/telemetry/latest  (ESP32 data, or "DISCONNECTED")
+    - switches go through /api/control/<chamber>/command  (manual mode only)
+    - the camera panel uses /api/vision/*  (Take a photo now / Upload a photo)
+    - the chat uses /api/ai/conversations
+  Serve it from the same origin as the backend (e.g. copy it to frontend/public/ or
+  put it behind the same reverse proxy), or set data-api="http://<backend-ip>:8000"
+  on the <html> tag and add that page origin to CORS_ORIGINS in backend/.env.
+-->
+<html lang="en" data-api="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MYCO AI – Overview</title>
+<style>
+  :root {
+    --canvas: #eef1ea; --surface: #ffffff; --surface-2: #f3f5f0; --surface-3: #e5eae2;
+    --line: #dce2da; --line-strong: #c4cdc5;
+    --ink: #12201c; --ink-2: #46564e; --ink-3: #708078;
+    --brand: #187c56; --brand-2: #105c40; --teal: #148086; --amber: #b87014; --danger: #be3030; --info: #2660aa;
+    --spore: #f2b8c8; --spore-ink: #2a1219;
+    --radius: 14px; --shadow: 0 1px 2px rgba(18,32,28,.06), 0 8px 24px -16px rgba(18,32,28,.18);
+    --sans: "Figtree", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --display: "Young Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.45; }
+  a { color: inherit; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .55; }
+  [hidden] { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- header ---------- */
+  .top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 18px; padding: 10px 20px; background: rgba(255,255,255,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+  .brand { font-family: var(--display); font-size: 20px; text-decoration: none; letter-spacing: .01em; }
+  .brand b { color: var(--brand); font-weight: 400; }
+  .top nav { display: flex; gap: 4px; margin-left: 8px; }
+  .top nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; color: var(--ink-2); font-weight: 600; font-size: 14px; }
+  .top nav a.active, .top nav a:hover { background: var(--surface-2); color: var(--ink); }
+  .top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); box-shadow: 0 0 0 3px rgba(196,205,197,.35); }
+  .dot.on { background: var(--brand); box-shadow: 0 0 0 3px rgba(24,124,86,.2); }
+  .iconbtn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; }
+  .iconbtn:hover { background: var(--surface-2); }
+
+  /* ---------- generic ---------- */
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border: 1px solid transparent; white-space: nowrap; }
+  .pill.live { background: #e3f2ea; color: var(--brand-2); border-color: #bfe0cf; }
+  .pill.demo { background: #fdf1dc; color: var(--amber); border-color: #f1d7a8; }
+  .pill.off { background: #f8e3e3; color: var(--danger); border-color: #efc1c1; }
+  .pill.muted { background: var(--surface-2); color: var(--ink-3); border-color: var(--line); }
+  .pill.info { background: #e4edf9; color: var(--info); border-color: #c3d6f1; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+  .tag.measured { background: #e3f2ea; color: var(--brand-2); }
+  .tag.simulated { background: #fdf1dc; color: var(--amber); }
+  .tag.reference { background: #e4edf9; color: var(--info); }
+  .tag.upload, .tag.neutral { background: var(--surface-3); color: var(--ink-2); }
+  .banner { margin: 14px 20px 0; padding: 10px 14px; border-radius: 10px; font-size: 14px; border: 1px solid; }
+  .banner.off { background: #f8e3e3; border-color: #efc1c1; color: #7a1f1f; }
+  .banner.demo { background: #fdf1dc; border-color: #f1d7a8; color: #6b4206; }
+  main { max-width: 1180px; margin: 0 auto; padding: 18px 20px 60px; }
+  .greeting h1 { font-family: var(--display); font-weight: 400; font-size: 28px; margin: 6px 0 2px; }
+  .greeting p { margin: 0 0 16px; color: var(--ink-2); }
+  .grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .top nav { display: none; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; }
+  .card h2 { font-size: 15px; margin: 0; letter-spacing: .01em; }
+  .card .sub { color: var(--ink-3); font-size: 12.5px; margin: 2px 0 0; }
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .stack { display: grid; gap: 16px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 9px; border: 1px solid var(--line-strong); background: var(--surface); padding: 7px 12px; font-size: 13.5px; font-weight: 600; }
+  .btn:hover:not(:disabled) { background: var(--surface-2); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: var(--brand-2); }
+  .btn.xs { padding: 4px 8px; font-size: 12px; border-radius: 7px; }
+  .btn.ghost { border-color: transparent; }
+  .muted { color: var(--ink-3); } .small { font-size: 12.5px; } .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .empty { padding: 16px; border: 1px dashed var(--line-strong); border-radius: 10px; color: var(--ink-3); font-size: 13.5px; text-align: center; }
+
+  /* ---------- the cap (climate) ---------- */
+  .cap { border-radius: 56px 56px var(--radius) var(--radius); background: linear-gradient(180deg, #fbf6f8 0%, var(--surface) 60%); border-color: #efdbe2; }
+  .readings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 6px 0 4px; }
+  @media (max-width: 560px) { .readings { grid-template-columns: 1fr; } }
+  .reading { padding: 14px 16px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+  .reading .label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .reading .value { font-family: var(--display); font-size: 46px; line-height: 1.05; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+  .reading .value small { font-size: 20px; color: var(--ink-3); margin-left: 2px; }
+  .reading .words { font-weight: 700; color: var(--brand-2); }
+  .reading .words.bad { color: var(--amber); }
+  .reading .words.unknown { color: var(--ink-3); }
+  .reading .target { font-size: 12.5px; color: var(--ink-3); }
+  .cap .fresh { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 13px; color: var(--ink-2); margin-top: 10px; }
+  .cap .fresh.off { color: var(--danger); font-weight: 600; }
+  .moist { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+  .stepper { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 2px; margin-top: 14px; scrollbar-width: thin; }
+  .step { flex: 0 0 auto; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+  .step.done { background: var(--surface-3); color: var(--ink-2); border-color: var(--surface-3); }
+  .step.now { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700; }
+  .stage-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; font-size: 13.5px; }
+
+  /* ---------- the stem (controls) ---------- */
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; background: var(--surface); padding: 6px 11px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .hint { font-size: 12.5px; color: var(--ink-3); margin: 8px 0 12px; }
+  .switches { display: grid; gap: 10px; }
+  .switch { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+  .switch .name { font-weight: 700; }
+  .switch .state { font-size: 12.5px; color: var(--ink-2); grid-column: 1; }
+  .switch .reason { font-size: 11.5px; color: var(--ink-3); grid-column: 1; }
+  .toggle { grid-row: 1 / span 3; position: relative; width: 48px; height: 28px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface-3); padding: 0; transition: background .15s; }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .15s; }
+  .toggle[aria-checked="true"] { background: var(--brand); border-color: var(--brand); }
+  .toggle[aria-checked="true"]::after { transform: translateX(20px); }
+
+  /* ---------- camera ---------- */
+  .cam { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 560px) { .cam { grid-template-columns: 1fr; } }
+  .shot { position: relative; width: 100%; aspect-ratio: 4/3; border-radius: 12px; overflow: hidden; background: var(--surface-3); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); font-size: 12.5px; }
+  .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shot .ref { position: absolute; right: 6px; bottom: 6px; width: 54px; height: 54px; border-radius: 8px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); object-fit: cover; }
+  .cam .headline { font-family: var(--display); font-size: 22px; margin: 2px 0 4px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+  .cam .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .cam .foot { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+
+  /* ---------- chart ---------- */
+  .ranges { display: inline-flex; gap: 4px; }
+  .ranges button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 3px 9px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .ranges button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .chart { width: 100%; height: 220px; display: block; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+
+  /* ---------- alerts / insight / chat ---------- */
+  .alert { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); }
+  .alert + .alert { margin-top: 8px; }
+  .alert .t { font-weight: 700; font-size: 13.5px; }
+  .alert .m { font-size: 12.5px; color: var(--ink-2); grid-column: 1; }
+  .alert .when { font-size: 11.5px; color: var(--ink-3); grid-column: 1; }
+  .alert.critical { border-color: #efc1c1; background: #fdf3f3; }
+  .alert.warning { border-color: #f1d7a8; background: #fdf8ee; }
+  .insight .head { font-family: var(--display); font-size: 19px; margin: 0 0 6px; }
+  .insight ul { margin: 0 0 8px; padding-left: 18px; font-size: 13.5px; }
+  .insight .next { font-size: 13.5px; } .insight .next b { color: var(--brand-2); }
+  .chat-log { display: grid; gap: 8px; max-height: 360px; overflow: auto; padding: 4px 2px; }
+  .msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; white-space: pre-wrap; }
+  .msg.user { justify-self: end; background: var(--spore); color: var(--spore-ink); border-bottom-right-radius: 4px; }
+  .msg.assistant { justify-self: start; background: var(--surface-2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .msg .meta { display: block; margin-top: 6px; font-size: 11px; color: var(--ink-3); }
+  .chat-form { display: flex; gap: 8px; margin-top: 10px; }
+  .chat-form input { flex: 1; border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 12px; font: inherit; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chips button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--ink-2); }
+
+  /* ---------- dialog / toasts ---------- */
+  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 20px; width: min(480px, 92vw); box-shadow: var(--shadow); }
+  dialog::backdrop { background: rgba(18,32,28,.35); }
+  dialog label { display: block; font-size: 12.5px; font-weight: 700; margin: 12px 0 4px; }
+  dialog select { width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line-strong); font: inherit; }
+  .note { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+  .toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 50; }
+  .toast { padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13px; box-shadow: var(--shadow); max-width: 360px; }
+  .toast.warn { background: var(--amber); } .toast.err { background: var(--danger); } .toast.ok { background: var(--brand); }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 20px 30px; font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="/">MYCO <b>AI</b></a>
+  <nav aria-label="Pages">
+    <a class="active" href="/" aria-current="page">Overview</a>
+    <a href="/stats">Stats</a>
+    <a href="/predictions">Predictions</a>
+  </nav>
+  <div class="right">
+    <span id="modePill" class="pill muted" title="Where the readings come from">connecting…</span>
+    <span id="liveDot" class="dot" title="Live feed"></span>
+    <button id="gearBtn" class="iconbtn" aria-label="Connections" title="Connections">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main>
+  <div class="greeting">
+    <h1 id="greeting">Good day</h1>
+    <p id="chamberLine">Looking for your chamber…</p>
+  </div>
+
+  <div class="grid">
+    <!-- ===================== left column ===================== -->
+    <div class="stack">
+      <!-- the cap: climate + stage -->
+      <section class="card cap" aria-labelledby="capTitle">
+        <div class="card-head">
+          <div><h2 id="capTitle">Chamber climate</h2><p class="sub" id="capSub">Readings from the ESP32 against the current phase's targets</p></div>
+          <span id="sourceTag" class="tag neutral">no data</span>
+        </div>
+        <div class="readings">
+          <div class="reading">
+            <div class="label">Temperature</div>
+            <div class="value"><span id="tempVal">—</span><small>°C</small></div>
+            <div class="words unknown" id="tempWords">Waiting for sensor</div>
+            <div class="target" id="tempTarget">No target set yet</div>
+          </div>
+          <div class="reading">
+            <div class="label">Humidity</div>
+            <div class="value"><span id="rhVal">—</span><small>%</small></div>
+            <div class="words unknown" id="rhWords">Waiting for sensor</div>
+            <div class="target" id="rhTarget">No target set yet</div>
+          </div>
+        </div>
+        <div class="moist"><span>Substrate moisture <span class="muted small">(raw, uncalibrated)</span></span><b id="moistVal">—</b></div>
+        <div class="fresh" id="fresh">No reading yet.</div>
+
+        <div class="stepper" id="stepper" aria-label="Growth phases"></div>
+        <div class="stage-row">
+          <span id="stageLine" class="muted">No batch on this chamber yet.</span>
+          <button id="confirmStage" class="btn xs" hidden>Confirm next phase</button>
+        </div>
+      </section>
+
+      <!-- the camera -->
+      <section class="card" aria-labelledby="camTitle">
+        <div class="card-head">
+          <div><h2 id="camTitle">Chamber camera</h2><p class="sub">ESP32-CAM photographs the grow bag and recognises the printed reference card</p></div>
+          <span id="camPill" class="pill muted">checking…</span>
+        </div>
+        <div class="cam">
+          <div class="shot" id="shot">No photo yet.</div>
+          <div>
+            <div class="headline" id="camHeadline">No photo yet</div>
+            <div class="badges" id="camBadges"></div>
+            <div class="small" id="camApplied"></div>
+            <div class="small muted" id="camMessage"></div>
+            <div class="actions">
+              <button id="takePhoto" class="btn primary">Take a photo now</button>
+              <label class="btn">Upload a photo<input id="uploadInput" class="sr-only" type="file" accept="image/jpeg,image/png" capture="environment"></label>
+              <button id="forceApply" class="btn" hidden>Use this phase anyway</button>
+            </div>
+            <div class="foot" id="camFoot">
+              <a id="pdfLink" href="/api/vision/reference.pdf" target="_blank" rel="noopener">Printable reference cards (PDF)</a> · the recogniser knows these printed cards only – it is not a general mushroom classifier.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- chart -->
+      <section class="card" aria-labelledby="chartTitle">
+        <div class="card-head">
+          <div><h2 id="chartTitle">Readings</h2><p class="sub" id="chartSub">Measured values, bucketed; gaps are gaps</p></div>
+          <div class="ranges" role="group" aria-label="Range">
+            <button data-range="1h" aria-pressed="true">1 h</button>
+            <button data-range="6h" aria-pressed="false">6 h</button>
+            <button data-range="24h" aria-pressed="false">24 h</button>
+          </div>
+        </div>
+        <svg id="chart" class="chart" viewBox="0 0 800 220" preserveAspectRatio="none" role="img" aria-label="Temperature and humidity over time"></svg>
+        <div class="legend"><span><i style="background:#c4601a"></i>Temperature °C</span><span><i style="background:#237c99"></i>Humidity %</span><span><i style="background:#e3f2ea;height:10px"></i>target band</span></div>
+      </section>
+    </div>
+
+    <!-- ===================== right column ===================== -->
+    <div class="stack">
+      <!-- the stem: controls -->
+      <section class="card" aria-labelledby="ctlTitle">
+        <div class="card-head">
+          <div><h2 id="ctlTitle">Chamber controls</h2><p class="sub">Every command goes through the control service's safety checks</p></div>
+          <div class="seg" role="group" aria-label="Control mode">
+            <button data-mode="auto" aria-pressed="false">Automatic</button>
+            <button data-mode="manual" aria-pressed="false">Manual</button>
+            <button data-mode="monitor" aria-pressed="false">Watch only</button>
+          </div>
+        </div>
+        <p class="hint" id="modeHint">Waiting for the chamber…</p>
+        <div class="switches" id="switches"></div>
+        <p class="small muted" id="ctlFoot" style="margin:10px 0 0"></p>
+      </section>
+
+      <!-- alerts -->
+      <section class="card" aria-labelledby="alertTitle">
+        <div class="card-head"><div><h2 id="alertTitle">Needs attention</h2><p class="sub">Open alerts for this chamber</p></div></div>
+        <div id="alerts"><div class="empty">Nothing open.</div></div>
+      </section>
+
+      <!-- insight -->
+      <section class="card insight" aria-labelledby="insightTitle">
+        <div class="card-head"><div><h2 id="insightTitle">What MYCO AI noticed</h2><p class="sub" id="insightLabel">—</p></div><span id="insightStatus" class="pill muted">—</span></div>
+        <div id="insightBody"><div class="empty">No briefing yet.</div></div>
+      </section>
+
+      <!-- chat -->
+      <section class="card" aria-labelledby="chatTitle">
+        <div class="card-head"><div><h2 id="chatTitle">Ask MYCO AI</h2><p class="sub">Answers from your stored readings; the assistant cannot switch anything</p></div><span id="aiPill" class="pill muted">—</span></div>
+        <div class="chat-log" id="chatLog"><div class="empty">Ask about the chamber, the phase or an alert.</div></div>
+        <div class="chips" id="chips"></div>
+        <form class="chat-form" id="chatForm">
+          <input id="chatInput" placeholder="e.g. Why is the humidifier on?" autocomplete="off" aria-label="Your question">
+          <button class="btn primary" id="chatSend">Send</button>
+        </form>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>Measured values are tagged <span class="tag measured">measured</span>; anything from the simulator is tagged <span class="tag simulated">simulated</span>. When the ESP32 is not reporting, the page says DISCONNECTED instead of showing numbers.</footer>
+
+<dialog id="connections" aria-labelledby="connTitle">
+  <h2 id="connTitle" style="margin:0 0 4px">Connections</h2>
+  <p class="small muted" style="margin:0">Which chamber is shown and how it is connected.</p>
+  <label for="chamberSelect">Chamber shown in the app</label>
+  <select id="chamberSelect"></select>
+  <div class="note" id="aiNote">MYCO AI model: checking…</div>
+  <div class="note">
+    <b>Your own chamber.</b> Flash <span class="mono">firmware/esp32</span> on the controller and <span class="mono">firmware/esp32cam</span> on the camera with the tokens from <span class="mono">backend/.env</span>, pointed at this server's LAN address (see <span class="mono">docs/hardware.md</span>). Readings appear as soon as the boards report.
+  </div>
+  <div class="small muted" id="serverLine" style="margin-top:10px"></div>
+  <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn" id="closeConn">Close</button></div>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  // ------------------------------------------------------------------ setup
+  const API = document.documentElement.dataset.api || '';
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  const state = {
+    devices: [], device: null, status: null, latest: null, control: null, batch: null, alerts: [],
+    camera: null, insight: null, ai: null, series: null, range: '1h', busy: new Set(),
+    conversationId: null, messages: [], wsOk: false, photoRequestedAt: 0,
+  };
+
+  async function api(path, { method = 'GET', body, formData, query } = {}) {
+    const url = new URL(API + path, location.origin);
+    if (query) for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
+    const init = { method, headers: {} };
+    if (formData) init.body = formData;
+    else if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    const res = await fetch(url, init);
+    const text = await res.text();
+    let data = null; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    if (!res.ok) { const e = new Error(errorMessage(data, res.status)); e.status = res.status; e.data = data; throw e; }
+    return data;
+  }
+  function errorMessage(data, status) {
+    const d = data && data.detail;
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d)) return d.map((x) => x.msg || JSON.stringify(x)).join('; ');
+    if (d && typeof d === 'object') return d.message || JSON.stringify(d);
+    return `Request failed (${status})`;
+  }
+  function toast(text, kind = '') {
+    const el = document.createElement('div'); el.className = `toast ${kind}`; el.textContent = text;
+    $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5000);
+  }
+
+  // ------------------------------------------------------------------ words & formatting
+  const WORDS = {
+    temp: { low: 'A little cool', veryLow: 'Too cold', in: 'Just right', high: 'Running warm', veryHigh: 'Too hot' },
+    rh: { low: 'Air is a bit dry', veryLow: 'Air is dry', in: 'Nicely humid', high: 'Very damp', veryHigh: 'Far too damp' },
+  };
+  // plain words for a value against its target band – arithmetic only, nothing is guessed
+  function verdict(kind, value, min, max, quality) {
+    if (quality && quality !== 'ok') return { state: 'invalid', words: quality === 'missing' ? 'No reading' : 'Sensor problem', bad: true };
+    if (value === null || value === undefined) return { state: 'unknown', words: 'Waiting for sensor', bad: false };
+    if (min == null || max == null) return { state: 'unknown', words: 'No target set yet', bad: false };
+    const w = WORDS[kind], far = kind === 'temp' ? 3 : 8;
+    if (value < min) return { state: 'low', words: min - value > far ? w.veryLow : w.low, bad: true };
+    if (value > max) return { state: 'high', words: value - max > far ? w.veryHigh : w.high, bad: true };
+    return { state: 'in', words: w.in, bad: false };
+  }
+  const STAGE_WORDS = { substrate_preparation: 'Substrate', inoculation: 'Inoculated', incubation: 'Colonising', browning: 'Browning', pinning: 'Pinning', fruiting: 'Fruiting', harvest_ready: 'Ready to pick', harvest: 'Harvest', post_harvest: 'After harvest' };
+  const shortStage = (st) => !st ? 'No stage' : (STAGE_WORDS[st.key] || String(st.name || st.key).replace(/\s*\(.*\)\s*$/, '').replace(/\s*&.*$/, ''));
+  const MODE_WORDS = {
+    auto: "MYCO AI's controller keeps the chamber in range with these switches. Choose Manual to take over.",
+    manual: 'You are in charge: tap a switch. The chamber confirms the real state within a few seconds.',
+    monitor: 'Nothing switches on by itself. Choose Automatic or Manual to control the chamber.',
+  };
+  function fmtAgo(iso) {
+    if (!iso) return 'never';
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 5) return 'just now'; if (s < 90) return `${Math.round(s)} s ago`;
+    if (s < 5400) return `${Math.round(s / 60)} min ago`; if (s < 172800) return `${Math.round(s / 3600)} h ago`;
+    return `${Math.round(s / 86400)} days ago`;
+  }
+  const fmtNum = (v, d = 1) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Number(v).toFixed(d);
+  const fmtRange = (a, b, unit) => (a == null || b == null) ? null : `${a}–${b} ${unit}`;
+  const greeting = () => { const h = new Date().getHours(); return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
+
+  // ------------------------------------------------------------------ loading
+  function pickDefault(devices) {
+    const online = (d) => d.connection_status === 'online';
+    return devices.find((d) => d.kind === 'hardware' && online(d)) || devices.find(online) || devices.find((d) => d.kind === 'hardware') || devices[0] || null;
+  }
+  async function loadDevices() {
+    const all = await api('/api/devices');
+    state.devices = all.filter((d) => d.role !== 'camera');          // the ESP32-CAM is not a chamber
+    if (!state.device || !state.devices.some((d) => d.id === state.device)) state.device = pickDefault(state.devices)?.id || null;
+  }
+  const settle = (p) => p.then((v) => v, (e) => { console.warn(e); return null; });
+  async function refreshAll() {
+    try { if (!state.devices.length) await loadDevices(); } catch (e) { setBanner('off', `Cannot reach the MYCO AI server (${e.message}).`); renderHeader(); return; }
+    const id = state.device;
+    const [status, latest, control, batches, alerts, camera, insight, ai, series] = await Promise.all([
+      settle(api('/api/system/status')),
+      id ? settle(api('/api/telemetry/latest', { query: { device_id: id } })) : null,
+      id ? settle(api(`/api/control/${id}`)) : null,
+      id ? settle(api('/api/batches', { query: { device_id: id, status: 'active' } })) : null,
+      id ? settle(api('/api/alerts', { query: { device_id: id, status: 'open' } })) : null,
+      settle(api('/api/vision/status')),
+      id ? settle(api('/api/ai/insight', { query: { device_id: id } })) : null,
+      settle(api('/api/ai/status')),
+      id ? settle(api('/api/telemetry/series', { query: { device_id: id, range: state.range, max_points: 300 } })) : null,
+    ]);
+    Object.assign(state, { status, latest, control, alerts: alerts || [], camera, insight, ai, series });
+    state.batch = Array.isArray(batches) ? (batches.find((b) => b.device_id === id) || batches[0] || null) : null;
+    try { const d = await api('/api/devices'); state.devices = d.filter((x) => x.role !== 'camera'); } catch {}
+    renderAll();
+  }
+  async function refreshSeries() {
+    if (!state.device) return;
+    state.series = await settle(api('/api/telemetry/series', { query: { device_id: state.device, range: state.range, max_points: 300 } }));
+    renderChart();
+  }
+
+  // ------------------------------------------------------------------ rendering
+  function renderAll() { renderHeader(); renderCap(); renderControls(); renderCamera(); renderChart(); renderAlerts(); renderInsight(); renderConnections(); renderAI(); }
+  const device = () => state.devices.find((d) => d.id === state.device) || null;
+  const isOnline = () => (state.control?.device?.connection_status || device()?.connection_status) === 'online';
+
+  function setBanner(kind, text) { const b = $('#banner'); if (!text) { b.hidden = true; return; } b.hidden = false; b.className = `banner ${kind}`; b.textContent = text; }
+  function renderHeader() {
+    $('#greeting').textContent = greeting();
+    const d = device(), st = state.status, pill = $('#modePill');
+    const mode = st?.mode;
+    pill.className = `pill ${mode === 'live' ? 'live' : mode === 'demo' ? 'demo' : st ? 'off' : 'muted'}`;
+    pill.textContent = mode === 'live' ? 'LIVE' : mode === 'demo' ? 'DEMO MODE' : st ? 'DISCONNECTED' : 'connecting…';
+    $('#liveDot').className = `dot ${state.wsOk ? 'on' : ''}`;
+    $('#chamberLine').textContent = d ? `${d.name} · ${d.kind === 'simulated' ? 'simulated chamber' : 'ESP32 chamber'} · ${d.connection_status}` : 'No chamber is registered yet.';
+    if (!st) return;
+    if (mode === 'disconnected') setBanner('off', `DISCONNECTED – ${st.detail || 'no device has delivered data recently'}. Nothing on this page is invented; readings return when the ESP32 reports.`);
+    else if (mode === 'demo') setBanner('demo', `DEMO MODE – ${st.detail || 'readings come from the built-in simulator'}.`);
+    else setBanner('', '');
+  }
+
+  function renderCap() {
+    const L = state.latest, r = L?.reading || null, t = state.control?.targets || L?.targets || null, q = r?.quality || {};
+    const tv = verdict('temp', r?.temperature_c, t?.temperature_min_c, t?.temperature_max_c, q.temperature_c);
+    const rv = verdict('rh', r?.relative_humidity_percent, t?.humidity_min_percent, t?.humidity_max_percent, q.relative_humidity_percent);
+    $('#tempVal').textContent = fmtNum(r?.temperature_c); $('#rhVal').textContent = fmtNum(r?.relative_humidity_percent, 0);
+    for (const [id, v] of [['#tempWords', tv], ['#rhWords', rv]]) { const el = $(id); el.textContent = v.words; el.className = `words ${v.bad ? 'bad' : v.state === 'in' ? '' : 'unknown'}`; }
+    $('#tempTarget').textContent = fmtRange(t?.temperature_min_c, t?.temperature_max_c, '°C') ? `Target ${fmtRange(t.temperature_min_c, t.temperature_max_c, '°C')}` : 'No target set yet';
+    $('#rhTarget').textContent = fmtRange(t?.humidity_min_percent, t?.humidity_max_percent, '%') ? `Target ${fmtRange(t.humidity_min_percent, t.humidity_max_percent, '%')}${t.humidity_max_percent >= 90 ? ' · DHT11 near its limit above 90 %' : ''}` : 'No target set yet';
+    $('#moistVal').textContent = r?.substrate_moisture_raw == null ? '—' : `${Math.round(r.substrate_moisture_raw)} counts`;
+    const tag = $('#sourceTag');
+    if (!r) { tag.className = 'tag neutral'; tag.textContent = 'no data'; }
+    else if (r.source === 'simulation') { tag.className = 'tag simulated'; tag.textContent = 'simulated'; }
+    else { tag.className = 'tag measured'; tag.textContent = 'measured'; }
+    const fresh = $('#fresh'), status = L?.connection_status || device()?.connection_status;
+    if (!r) { fresh.className = 'fresh off'; fresh.textContent = 'No reading from this chamber yet – it is DISCONNECTED.'; }
+    else if (status !== 'online') { fresh.className = 'fresh off'; fresh.textContent = `Chamber disconnected – last reading ${fmtAgo(r.measured_at)}.`; }
+    else { fresh.className = 'fresh'; fresh.innerHTML = `Last reading ${esc(fmtAgo(r.measured_at))} · ${r.source === 'simulation' ? 'from the simulator' : 'from the ESP32'}${t?.source_label ? ` · targets: ${esc(t.source_label)}` : ''}`; }
+    $('#capSub').textContent = t?.stage_key ? `Targets for the ${shortStage({ key: t.stage_key, name: t.stage_key }).toLowerCase()} phase of ${t.batch_code || 'the batch'}` : 'Readings from the ESP32 – no phase targets until a batch has a stage';
+
+    // stage stepper (profile stages; current one highlighted) – stages only change when confirmed or when the camera applies a card
+    const b = state.batch, stages = b?.profile?.stages || [], cur = b?.current_stage_key || null, idx = stages.findIndex((s) => s.key === cur);
+    $('#stepper').innerHTML = stages.map((s, i) => `<span class="step ${i < idx ? 'done' : i === idx ? 'now' : ''}" title="${esc(s.name)}">${esc(shortStage(s))}</span>`).join('');
+    const next = idx >= 0 ? stages[idx + 1] : stages[0], btn = $('#confirmStage');
+    if (!b) { $('#stageLine').textContent = 'No batch on this chamber yet – hold a reference card in front of the camera (or create a batch via the API).'; btn.hidden = true; return; }
+    $('#stageLine').innerHTML = `<b>${esc(b.code)}</b> · ${esc(b.species)} · ${esc(cur ? (b.current_stage_name || cur) : 'no stage yet')}${b.is_demo ? ' <span class="tag simulated">demo batch</span>' : ''}`;
+    btn.hidden = !next; if (next) { btn.textContent = `Confirm: ${shortStage(next)}`; btn.onclick = () => confirmStage(b.id, next); }
+  }
+
+  const ACTUATORS = [['humidifier', 'Humidifier'], ['fan', 'Fan'], ['heater', 'Heater']];
+  function stateWords(entry, reported, mode, busy) {
+    const confirmed = entry?.confirmed ?? reported ?? null, on = confirmed === true;
+    if (busy) return { on, words: 'Sending…' };
+    const status = entry?.status || (confirmed === null ? 'unknown' : 'confirmed');
+    if (status === 'pending') return { on, words: `Waiting for the chamber to confirm ${entry?.requested ? 'ON' : 'OFF'}` };
+    if (status === 'mismatch') return { on, words: `Chamber reports ${on ? 'running' : 'off'} – it did not follow the ${entry?.requested ? 'ON' : 'OFF'} command` };
+    if (confirmed === null) return { on: false, words: 'State unknown – no report from the chamber yet' };
+    return { on, words: `${on ? 'Running' : 'Off'}${mode === 'auto' ? ' · automatic' : ''}` };
+  }
+  function renderControls() {
+    const c = state.control, mode = c?.mode || device()?.control_mode || null, online = isOnline();
+    $$('.seg button').forEach((b) => { b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); b.disabled = !c; });
+    $('#modeHint').textContent = !c ? 'Waiting for the chamber…' : !online ? 'The chamber is disconnected – the switches cannot be reached. Commands are held until it reports again.' : MODE_WORDS[mode] || '';
+    const st = c?.device?.actuator_state || {}, r = c?.reading || state.latest?.reading || null;
+    $('#switches').innerHTML = ACTUATORS.map(([k, label]) => {
+      const e = st[k], w = stateWords(e, r ? r[`${k}_state`] : null, mode, state.busy.has(k));
+      const can = mode === 'manual' && online && !state.busy.has(k) && !!c;
+      return `<div class="switch"><span class="name">${label}</span>
+        <button class="toggle" role="switch" aria-checked="${w.on}" aria-label="${label}" data-act="${k}" ${can ? '' : 'data-blocked="1"'}></button>
+        <span class="state">${esc(w.words)}</span>
+        ${e?.last_reason ? `<span class="reason">${esc(e.last_reason)}</span>` : ''}</div>`;
+    }).join('');
+    $$('#switches .toggle').forEach((b) => b.onclick = () => toggleActuator(b.dataset.act, b.getAttribute('aria-checked') !== 'true'));
+    const notes = c?.safety_notes || [];
+    $('#ctlFoot').textContent = notes.length ? notes.join(' · ') : (c ? 'Heater: 32 °C cut-off, 30 min runtime cap, no heating without a fresh reading. The AI assistant has no access to these switches.' : '');
+  }
+
+  function describeCapture(cap) {
+    if (!cap) return 'No photo yet';
+    if (cap.status === 'matched' && cap.card) return `${cap.card.species} · ${cap.card.phase}`;
+    if (cap.status === 'no_match') return 'No reference card recognised';
+    if (cap.status === 'unreadable') return 'The photo could not be read';
+    return cap.status || 'Unknown result';
+  }
+  function renderCamera() {
+    const cs = state.camera, cap = cs?.last_capture || null, pill = $('#camPill');
+    if (!cs) { pill.className = 'pill muted'; pill.textContent = 'unavailable'; }
+    else if (!cs.camera_has_token) { pill.className = 'pill off'; pill.textContent = 'no camera token'; }
+    else { pill.className = `pill ${cs.online ? 'live' : 'off'}`; pill.textContent = cs.online ? 'camera online' : 'camera offline'; }
+    const shot = $('#shot');
+    if (cap?.image_url) shot.innerHTML = `<img src="${esc(API + cap.image_url)}" alt="Camera capture ${esc(fmtAgo(cap.captured_at))}">${cap.card ? `<img class="ref" src="${esc(API + cap.card.image_url)}" alt="Reference card ${esc(cap.card.species)} ${esc(cap.card.phase)}">` : ''}`;
+    else shot.textContent = 'No photo yet.';
+    $('#camHeadline').textContent = describeCapture(cap);
+    const badges = [];
+    if (cap?.confidence) badges.push(`<span class="pill ${cap.confidence === 'high' ? 'live' : cap.confidence === 'medium' ? 'info' : 'demo'}">${cap.confidence === 'high' ? 'Sure' : cap.confidence === 'medium' ? 'Fairly sure' : 'Unsure'}</span>`);
+    if (cap?.method) badges.push(`<span class="pill muted">${cap.method === 'qr' ? 'by QR code' : 'by picture'}</span>`);
+    if (cap) badges.push(`<span class="tag ${cap.source === 'upload' ? 'upload' : 'measured'}">${cap.source === 'upload' ? 'uploaded photo' : 'ESP32-CAM'}</span>`);
+    if (cap?.captured_at) badges.push(`<span class="small muted">${esc(fmtAgo(cap.captured_at))}</span>`);
+    $('#camBadges').innerHTML = badges.join('');
+    $('#camApplied').textContent = !cap ? '' : cap.applied ? `Applied – the chamber now follows this phase${cap.apply_note ? ` (${cap.apply_note})` : ''}.` : cap.status === 'matched' ? 'Not applied yet.' : 'Nothing was changed.';
+    $('#camMessage').textContent = cap?.message || '';
+    const force = $('#forceApply');
+    force.hidden = !(cap && cap.status === 'matched' && !cap.applied);
+    force.onclick = () => applyCapture(cap);
+    const pending = cs?.manual_pending || (Date.now() - state.photoRequestedAt < 30000);
+    const take = $('#takePhoto'); take.disabled = pending || !cs?.camera_has_token; take.textContent = pending ? 'Waiting for the camera…' : 'Take a photo now';
+    const rec = cs?.recognition;
+    $('#pdfLink').href = API + '/api/vision/reference.pdf';
+    $('#camFoot').lastChild.textContent = ` · automatic photo every ${Math.round((cs?.auto_interval_seconds || 1800) / 60)} min${rec ? ` · ${rec.indexed} of ${cs.reference_cards} cards have reference pictures${rec.missing?.length ? ` (QR only: ${rec.missing.join(', ')})` : ''}` : ''}. The recogniser knows the printed cards only – it is not a general mushroom classifier.`;
+  }
+
+  function renderChart() {
+    const svg = $('#chart'), s = state.series, pts = (s?.points || []).filter((p) => p.temperature_c != null || p.relative_humidity_percent != null);
+    $$('.ranges button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.range === state.range)));
+    if (!pts.length) { svg.innerHTML = `<text x="400" y="115" text-anchor="middle" fill="#708078" font-size="14" font-family="inherit">No readings in the last ${state.range} – the chamber has not reported.</text>`; $('#chartSub').textContent = 'Nothing to draw yet'; return; }
+    const W = 800, H = 220, P = { l: 36, r: 36, t: 10, b: 22 };
+    const t0 = new Date(s.from).getTime(), t1 = new Date(s.to).getTime();
+    const x = (iso) => P.l + ((new Date(iso).getTime() - t0) / Math.max(1, t1 - t0)) * (W - P.l - P.r);
+    const temps = pts.map((p) => p.temperature_c).filter((v) => v != null), rhs = pts.map((p) => p.relative_humidity_percent).filter((v) => v != null);
+    const tg = s.targets || state.control?.targets || {};
+    const tMin = Math.min(...temps, tg.temperature_min_c ?? Infinity) - 1, tMax = Math.max(...temps, tg.temperature_max_c ?? -Infinity) + 1;
+    const hMin = Math.max(0, Math.min(...rhs, tg.humidity_min_percent ?? Infinity) - 5), hMax = Math.min(100, Math.max(...rhs, tg.humidity_max_percent ?? -Infinity) + 5);
+    const yT = (v) => P.t + (1 - (v - tMin) / Math.max(.1, tMax - tMin)) * (H - P.t - P.b);
+    const yH = (v) => P.t + (1 - (v - hMin) / Math.max(.1, hMax - hMin)) * (H - P.t - P.b);
+    const bucket = (s.bucket_seconds || 60) * 1000 * 2.5;
+    const path = (get, y) => { let d = '', prev = null; for (const p of pts) { const v = get(p); if (v == null) { prev = null; continue; } const tt = new Date(p.t).getTime(); d += (prev !== null && tt - prev <= bucket ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(v).toFixed(1) + ' '; prev = tt; } return d; };
+    const band = (lo, hi, y, color) => (lo == null || hi == null) ? '' : `<rect x="${P.l}" y="${y(hi)}" width="${W - P.l - P.r}" height="${Math.max(1, y(lo) - y(hi))}" fill="${color}" opacity=".5"/>`;
+    const ticks = (lo, hi, y, side) => [lo, (lo + hi) / 2, hi].map((v) => `<text x="${side === 'l' ? P.l - 4 : W - P.r + 4}" y="${y(v) + 4}" font-size="10" fill="#708078" text-anchor="${side === 'l' ? 'end' : 'start'}">${v.toFixed(0)}</text>`).join('');
+    const times = [0, .5, 1].map((f) => { const d = new Date(t0 + f * (t1 - t0)); return `<text x="${P.l + f * (W - P.l - P.r)}" y="${H - 6}" font-size="10" fill="#708078" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}</text>`; }).join('');
+    svg.innerHTML = band(tg.temperature_min_c, tg.temperature_max_c, yT, '#e3f2ea') + band(tg.humidity_min_percent, tg.humidity_max_percent, yH, '#e4edf9')
+      + `<line x1="${P.l}" y1="${H - P.b}" x2="${W - P.r}" y2="${H - P.b}" stroke="#dce2da"/>`
+      + `<path d="${path((p) => p.temperature_c, yT)}" fill="none" stroke="#c4601a" stroke-width="2" vector-effect="non-scaling-stroke"/>`
+      + `<path d="${path((p) => p.relative_humidity_percent, yH)}" fill="none" stroke="#237c99" stroke-width="2" vector-effect="non-scaling-stroke"/>`
+      + ticks(tMin, tMax, yT, 'l') + ticks(hMin, hMax, yH, 'r') + times;
+    const src = (s.sources || []).includes('simulation') ? 'includes simulated data' : 'measured by the ESP32';
+    $('#chartSub').textContent = `${s.n_readings} readings · ${Math.round(s.bucket_seconds / 60) || 1} min buckets · ${src}; gaps are drawn as gaps`;
+  }
+
+  function renderAlerts() {
+    const list = state.alerts || [], box = $('#alerts');
+    if (!list.length) { box.innerHTML = '<div class="empty">Nothing open.</div>'; return; }
+    box.innerHTML = list.map((a) => `<div class="alert ${a.severity}"><span class="t">${esc(a.title)}</span>
+      ${a.status === 'active' ? `<button class="btn xs" data-ack="${a.id}">Mark as seen</button>` : '<span class="small muted">seen</span>'}
+      <span class="m">${esc(a.message)}</span><span class="when">${esc(fmtAgo(a.last_seen_at || a.opened_at))}${a.occurrence_count > 1 ? ` · ${a.occurrence_count}×` : ''}${a.source === 'simulation' ? ' · simulated' : ''}</span></div>`).join('');
+    $$('[data-ack]', box).forEach((b) => b.onclick = async () => { try { await api(`/api/alerts/${b.dataset.ack}/acknowledge`, { method: 'POST', body: {} }); toast('Marked as seen', 'ok'); refreshAll(); } catch (e) { toast(e.message, 'err'); } });
+  }
+
+  function renderInsight() {
+    const i = state.insight, pill = $('#insightStatus');
+    if (!i) { $('#insightBody').innerHTML = '<div class="empty">No briefing yet – it needs some readings first.</div>'; $('#insightLabel').textContent = '—'; pill.textContent = '—'; return; }
+    pill.className = `pill ${i.status === 'good' ? 'live' : i.status === 'watch' ? 'demo' : i.status === 'attention' ? 'off' : 'muted'}`; pill.textContent = i.status === 'good' ? 'all good' : i.status === 'watch' ? 'watch' : i.status === 'attention' ? 'attention' : 'unknown';
+    $('#insightLabel').textContent = i.label || '';
+    $('#insightBody').innerHTML = `<p class="head">${esc(i.headline)}</p>${i.narrative ? `<p class="small">${esc(i.narrative)}</p>` : ''}<ul>${(i.points || []).map((p) => `<li>${esc(p)}</li>`).join('')}</ul>${i.next_step ? `<p class="next"><b>Next step:</b> ${esc(i.next_step)}</p>` : ''}${i.data_note ? `<p class="small muted">${esc(i.data_note)}</p>` : ''}`;
+  }
+
+  function renderAI() {
+    const a = state.ai, pill = $('#aiPill');
+    if (!a) { pill.className = 'pill muted'; pill.textContent = '—'; return; }
+    const ready = a.configured && !a.circuit_open;
+    pill.className = `pill ${ready ? 'live' : 'demo'}`; pill.textContent = !a.configured ? 'AI offline – answers from data' : a.circuit_open ? 'model unreachable' : (a.model || 'model ready');
+    if (!$('#chips').childElementCount) api('/api/ai/suggestions').then((s) => { $('#chips').innerHTML = (s.questions || []).slice(0, 4).map((q) => `<button type="button">${esc(q)}</button>`).join(''); $$('#chips button').forEach((b) => b.onclick = () => { $('#chatInput').value = b.textContent; $('#chatInput').focus(); }); }).catch(() => {});
+  }
+  function renderChat() {
+    const log = $('#chatLog');
+    if (!state.messages.length) { log.innerHTML = '<div class="empty">Ask about the chamber, the phase or an alert.</div>'; return; }
+    log.innerHTML = state.messages.map((m) => `<div class="msg ${m.role}">${esc(m.content).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}${m.role === 'assistant' ? `<span class="meta">${m.mode === 'fallback' ? 'Answered directly from your stored data – the AI model is offline' : `Written by MYCO AI (${esc(m.model || 'model')}) from your stored data`}</span>` : ''}</div>`).join('');
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function renderConnections() {
+    const sel = $('#chamberSelect');
+    sel.innerHTML = state.devices.map((d) => `<option value="${esc(d.id)}" ${d.id === state.device ? 'selected' : ''}>${esc(d.name)} · ${d.kind === 'simulated' ? 'demo simulator' : 'hardware'} · ${esc(d.connection_status)}</option>`).join('') || '<option>No chamber registered</option>';
+    const a = state.ai;
+    $('#aiNote').textContent = !a ? 'MYCO AI model: waiting for the server…' : !a.configured ? 'MYCO AI model: no AI key on the server. The assistant answers directly from your stored readings instead.' : a.circuit_open ? `MYCO AI model: could not be reached (${a.last_error || 'unknown error'}). The assistant answers from your data only.` : `MYCO AI model: ${a.model || 'model'} via ${a.endpoint_host || a.provider}. The key stays on the server.`;
+    const st = state.status; $('#serverLine').textContent = st ? `Server ${st.version} · ${st.open_access ? 'no sign-in (local prototype mode)' : 'sign-in required for control'} · ${st.label}` : '';
+  }
+
+  // ------------------------------------------------------------------ actions
+  async function setMode(mode) {
+    if (!state.device) return;
+    try { await api(`/api/control/${state.device}/mode`, { method: 'POST', body: { mode } }); toast(`Chamber set to ${mode === 'auto' ? 'Automatic' : mode === 'manual' ? 'Manual' : 'Watch only'}`, 'ok'); }
+    catch (e) { toast(e.message, 'err'); }
+    refreshAll();
+  }
+  async function toggleActuator(actuator, on) {
+    const c = state.control;
+    if (!c || !isOnline()) return toast('The chamber is disconnected', 'warn');
+    if (c.mode !== 'manual') return toast(c.mode === 'auto' ? 'The chamber is in Automatic – choose Manual to switch things yourself.' : 'The chamber is in Watch only – choose Manual to switch things yourself.', 'warn');
+    state.busy.add(actuator); renderControls();
+    try { const cmd = await api(`/api/control/${state.device}/command`, { method: 'POST', body: { actuator, state: on, reason: 'overview switch' } }); toast(`${actuator} ${on ? 'ON' : 'OFF'} requested – waiting for the chamber to confirm (${cmd.status})`, 'ok'); }
+    catch (e) { toast(e.status === 422 ? `Rejected: ${e.message}` : e.message, 'err'); }
+    finally { state.busy.delete(actuator); }
+    refreshAll();
+  }
+  async function confirmStage(batchId, stage) {
+    if (!confirm(`Confirm that ${state.batch?.code || 'the batch'} is now in "${stage.name}"? The chamber targets change to this phase.`)) return;
+    try { await api(`/api/batches/${batchId}/stage`, { method: 'POST', body: { stage_key: stage.key } }); toast(`Stage set to ${shortStage(stage)}`, 'ok'); } catch (e) { toast(e.message, 'err'); }
+    refreshAll();
+  }
+  async function requestPhoto() {
+    try {
+      const r = await api('/api/vision/capture-request', { method: 'POST', body: { device_id: state.device } });
+      state.photoRequestedAt = Date.now();
+      toast(r.camera_online ? 'Asked the camera for a photo – the result appears here in a few seconds.' : 'The camera is offline – the request is stored and runs when it reconnects.', r.camera_online ? 'ok' : 'warn');
+    } catch (e) { toast(e.message, 'err'); }
+    refreshAll();
+  }
+  async function uploadPhoto(file) {
+    if (!file) return;
+    const fd = new FormData(); fd.append('file', file, file.name || 'photo.jpg');
+    try {
+      const cap = await api('/api/vision/upload', { method: 'POST', formData: fd, query: { device_id: state.device, apply: 'true' } });
+      toast(cap.status === 'matched' ? `${describeCapture(cap)} – ${cap.applied ? 'applied to the chamber' : 'not applied (unsure)'}` : cap.status === 'no_match' ? 'No card recognised' : 'The photo could not be read', cap.applied ? 'ok' : 'warn');
+    } catch (e) { toast(e.message, 'err'); }
+    refreshAll();
+  }
+  async function applyCapture(cap) {
+    try { const r = await api(`/api/vision/captures/${cap.id}/apply`, { method: 'POST', body: { force: cap.confidence !== 'high' && cap.confidence !== 'medium', device_id: state.device } }); toast(`Phase applied to ${r.result.batch_code}`, 'ok'); }
+    catch (e) { toast(e.message, 'err'); }
+    refreshAll();
+  }
+  async function sendChat(text) {
+    if (!text.trim()) return;
+    state.messages.push({ role: 'user', content: text }); renderChat();
+    $('#chatSend').disabled = true;
+    try {
+      if (!state.conversationId) { const c = await api('/api/ai/conversations', { method: 'POST', body: { device_id: state.device, batch_id: state.batch?.id ?? null } }); state.conversationId = c.id; }
+      const r = await api(`/api/ai/conversations/${state.conversationId}/messages`, { method: 'POST', body: { content: text } });
+      const reply = (r.messages || []).filter((m) => m.role === 'assistant').pop();
+      if (reply) state.messages.push(reply);
+      state.ai = r.ai || state.ai; renderAI();
+    } catch (e) { state.messages.push({ role: 'assistant', content: `Sorry – ${e.message}`, mode: 'fallback' }); }
+    finally { $('#chatSend').disabled = false; renderChat(); }
+  }
+
+  // ------------------------------------------------------------------ live feed
+  let refreshTimer = null;
+  const scheduleRefresh = (ms = 300) => { clearTimeout(refreshTimer); refreshTimer = setTimeout(refreshAll, ms); };
+  function connectWS() {
+    const base = API ? API.replace(/^http/, 'ws') : location.origin.replace(/^http/, 'ws');
+    let ws; try { ws = new WebSocket(base + '/ws/live'); } catch { return; }
+    ws.onopen = () => { state.wsOk = true; renderHeader(); };
+    ws.onclose = () => { state.wsOk = false; renderHeader(); setTimeout(connectWS, 5000); };
+    ws.onmessage = (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (['telemetry', 'device_status', 'actuator_status', 'command', 'control', 'alert', 'camera_capture', 'prediction'].includes(msg.type)) scheduleRefresh();
+      if (msg.type === 'camera_capture' && msg.payload?.capture) { state.photoRequestedAt = 0; toast(`Camera: ${describeCapture(msg.payload.capture)}`, msg.payload.capture.applied ? 'ok' : ''); }
+    };
+  }
+
+  // ------------------------------------------------------------------ wiring
+  $$('.seg button').forEach((b) => b.onclick = () => setMode(b.dataset.mode));
+  $$('.ranges button').forEach((b) => b.onclick = () => { state.range = b.dataset.range; refreshSeries(); });
+  $('#takePhoto').onclick = requestPhoto;
+  $('#uploadInput').onchange = (e) => { uploadPhoto(e.target.files[0]); e.target.value = ''; };
+  $('#chatForm').onsubmit = (e) => { e.preventDefault(); const i = $('#chatInput'); const t = i.value; i.value = ''; sendChat(t); };
+  $('#gearBtn').onclick = () => { renderConnections(); $('#connections').showModal(); };
+  $('#closeConn').onclick = () => $('#connections').close();
+  $('#chamberSelect').onchange = (e) => { state.device = e.target.value; state.conversationId = null; state.messages = []; renderChat(); refreshAll(); };
+
+  refreshAll();
+  connectWS();
+  setInterval(refreshAll, 15000);            // polling fallback when the WebSocket is not available
+  setInterval(renderCap, 10000);             // keeps the "x s ago" lines honest between refreshes
+})();
+</script>
+</body>
+</html>
