@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:webpage": "tsc -b && vite build --outDir ../webpage --emptyOutDir && node -e \"require('fs').cpSync('../scripts/webpage','../webpage',{recursive:true})\"",
     "preview": "vite preview",
     "lint": "tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",

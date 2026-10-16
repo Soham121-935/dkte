@@ -114,3 +114,46 @@ class TestSchemasAndDocs:
                 if not re.search(rf"`{method.upper()} {re.escape(path)}(\?[^`]*)?`", documented):
                     missing.append(f"{method.upper()} {path}")
         assert missing == [], f"routes missing from docs/api.md: {missing}"
+
+
+class TestBuiltWebpage:
+    """The backend serves the built webpage folder (FRONTEND_DIR) so one process is enough for the demo."""
+
+    @pytest.fixture()
+    def webpage_app(self, tmp_path, monkeypatch, fresh_db):
+        (tmp_path / "assets").mkdir()
+        (tmp_path / "index.html").write_text("<!doctype html><title>MYCO AI</title><div id=root></div>", encoding="utf-8")
+        (tmp_path / "assets" / "app.js").write_text("console.log('myco')", encoding="utf-8")
+        (tmp_path / "favicon.svg").write_text("<svg/>", encoding="utf-8")
+        monkeypatch.setenv("FRONTEND_DIR", str(tmp_path))
+        reset_settings_cache()
+        from app.main import create_app
+        from fastapi.testclient import TestClient
+
+        with TestClient(create_app()) as c:
+            yield c
+        monkeypatch.setenv("FRONTEND_DIR", "")
+        reset_settings_cache()
+
+    def test_pages_assets_and_api_paths(self, webpage_app):
+        c = webpage_app
+        # the page itself and every SPA route load index.html
+        for path in ("/", "/stats", "/predictions", "/some/deep/link"):
+            r = c.get(path)
+            assert r.status_code == 200 and "<div id=root>" in r.text, path
+        assert c.get("/").headers["cache-control"] == "no-cache"
+        # real files are served as files
+        assert c.get("/assets/app.js").text == "console.log('myco')"
+        assert c.get("/favicon.svg").text == "<svg/>"
+        # API / WS paths are never turned into the page
+        assert c.get("/api/system/health").status_code == 200
+        assert c.get("/api/does-not-exist").status_code == 404
+        assert c.get("/api/does-not-exist").json()["detail"] == "Not Found"
+        # no escaping the folder: an encoded traversal falls back to the page, never to a file outside
+        r = c.get("/%2e%2e/%2e%2e/etc/passwd")
+        assert r.status_code == 200 and "<div id=root>" in r.text and "root:" not in r.text
+
+    def test_api_only_when_no_folder(self, client):
+        r = client.get("/")
+        assert r.status_code == 200 and r.json()["docs"] == "/api/docs"
+        assert client.get("/stats").status_code == 404

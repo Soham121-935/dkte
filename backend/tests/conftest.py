@@ -43,6 +43,7 @@ os.environ.update(
         "CAMERA_MIN_INLIERS": "20",
         "CAMERA_AUTO_APPLY": "true",
         "CAMERA_AUTO_MODE": "true",
+        "FRONTEND_DIR": "",  # API only in the suite; the webpage folder gets its own test
     }
 )
 

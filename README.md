@@ -46,6 +46,23 @@ no third-party requests from the browser.
 
 ---
 
+## Ready-to-go folder (`webpage/`)
+
+`webpage/` is the built website plus a launcher. On a laptop with Python 3.11+:
+
+```
+webpage/start.sh        # Linux / macOS
+webpage\start.bat       # Windows
+```
+
+The first run creates `backend/.venv`, installs the Python packages and makes
+`backend/.env` from the example; then it serves **the page and the API from
+one process** at http://localhost:8000 (phones on the same Wi-Fi:
+`http://<laptop LAN IP>:8000`). Put the device tokens and the NVIDIA key into
+`backend/.env` and run it again. Rebuild the folder after frontend changes with
+`cd frontend && npm run build:webpage` (`FRONTEND_DIR` in `.env` points the
+backend at it; leave it empty for API-only).
+
 ## Quick start (development)
 
 Requirements: Python ≥ 3.11, Node ≥ 20 (tested with 3.11 / 22). No Docker or
@@ -191,6 +208,7 @@ important ones:
 | `CAMERA_DEVICE_ID`, `CAMERA_DEVICE_TOKEN`, `CAMERA_TARGET_DEVICE_ID`, `CAMERA_AUTO_INTERVAL_SECONDS`, `CAMERA_MIN_INLIERS`, `CAMERA_AUTO_APPLY`, `CAMERA_AUTO_MODE` | the ESP32-CAM, which chamber its result is applied to, automatic photo interval, match threshold and whether a match sets the stage / switches the chamber to automatic |
 | `CONTROL_LOOP_INTERVAL_SECONDS`, `PREDICTION_INTERVAL_SECONDS`, `DEVICE_OFFLINE_AFTER_SECONDS`, `BACKGROUND_TASKS_ENABLED` | background tasks |
 | `NOTIFY_WEBHOOK_URL`, `SMTP_*` | optional external alert channels |
+| `FRONTEND_DIR` | built webpage folder served at `/` by the backend (default `../webpage`; empty = API only) |
 | `CORS_ORIGINS`, `UPLOAD_DIR`, `LOG_LEVEL` | misc |
 
 The frontend has **no** environment variables and no secrets
@@ -446,5 +464,6 @@ schemas/           JSON Schemas for the IoT contract (+ README with topics/auth)
 firmware/esp32/    chamber controller sketch (HTTP, local safety logic)
 firmware/esp32cam/ ESP32-CAM sketch (poll → photo → upload)
 docs/              api.md, architecture.md, hardware.md, mushroom-reference-cards.pdf
-scripts/           setup.sh, dev.sh, test.sh, export_schemas.py, http_device.py, build_reference_pdf.py
+scripts/           setup.sh, dev.sh, test.sh, export_schemas.py, http_device.py, build_reference_pdf.py, webpage/ (launchers)
+webpage/           built website + start.sh / start.bat – the ready-to-go folder (npm run build:webpage)
 ```

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -116,9 +116,30 @@ def create_app() -> FastAPI:
     upload_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/api/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
+    frontend_dir = Path(settings.frontend_dir) if settings.frontend_dir else None
+    frontend_index = frontend_dir / "index.html" if frontend_dir else None
+    serve_frontend = bool(frontend_index and frontend_index.is_file())
+    if serve_frontend:
+        log.info("serving the built webpage from %s", frontend_dir)
+        app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="webpage-assets")
+
     @app.get("/", include_in_schema=False)
     def root():
+        if serve_frontend:
+            return FileResponse(frontend_index, headers={"Cache-Control": "no-cache"})
         return {"app": settings.app_name, "version": __version__, "docs": "/api/docs", "health": "/api/system/health"}
+
+    if serve_frontend:
+        # Single-page app: /stats, /predictions and any other page path load index.html; real files
+        # (favicon.svg …) are served as-is. API/WS paths are never swallowed – they 404 as JSON.
+        @app.get("/{page_path:path}", include_in_schema=False)
+        def webpage(page_path: str):
+            if page_path in ("api", "ws") or page_path.startswith(("api/", "ws/")):
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
+            candidate = (frontend_dir / page_path).resolve()
+            if page_path and candidate.is_file() and frontend_dir.resolve() in candidate.parents:
+                return FileResponse(candidate)
+            return FileResponse(frontend_index, headers={"Cache-Control": "no-cache"})
 
     return app
 

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(DATA_DIR / 'myco.sqlite3').as_posix()}"
     db_auto_migrate: bool = True
     upload_dir: str = str(DATA_DIR / "uploads")
+    # Built webpage (frontend) to serve from this process: a folder with index.html + assets/.
+    # Default = <repo>/webpage (created by `npm run build:webpage` in frontend/). Empty folder = API only.
+    frontend_dir: str = str(BACKEND_DIR.parent / "webpage")
 
     # ----------------------------------------------------------------- auth
     jwt_secret: str = "change-me-development-only"
